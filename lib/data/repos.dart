@@ -1,0 +1,359 @@
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
+
+import 'local/local_db.dart';
+import 'models.dart';
+import 'remote/supa_service.dart';
+
+final _uuid = Uuid();
+
+final supaServiceProvider = Provider((_) => SupaService());
+final localDbProvider = Provider((_) => LocalDb.instance);
+
+// ==================== AUTH ====================
+
+final authStateProvider = StreamProvider<AuthState>((ref) {
+  return ref.watch(supaServiceProvider).authChanges;
+});
+
+final profileProvider = FutureProvider<AppUser?>((ref) async {
+  final auth = ref.watch(authStateProvider);
+  return auth.when(
+    data: (s) async {
+      final user = s.session?.user;
+      if (user == null) return null;
+      // prefer local cache, fall back to remote
+      final local = await LocalDb.instance.getAll('profiles');
+      final hit = local.where((e) => e['id'] == user.id);
+      if (hit.isNotEmpty) return AppUser.fromMap(hit.first);
+      try {
+        final rows = await ref
+            .read(supaServiceProvider)
+            .selectSince('profiles', null);
+        final me = rows.where((e) => e['id'] == user.id);
+        if (me.isEmpty) return null;
+        final p = AppUser.fromMap(me.first);
+        await LocalDb.instance.upsertAll('profiles', [p.toMap()]);
+        return p;
+      } catch (_) {
+        return null;
+      }
+    },
+    loading: () => null,
+    error: (_, __) => null,
+  );
+});
+
+// ==================== SYNC ====================
+
+enum SyncStatus { idle, syncing, error }
+
+class SyncState {
+  final SyncStatus status;
+  final int pending;
+  final DateTime? lastSync;
+  final String? error;
+  SyncState(
+      {this.status = SyncStatus.idle,
+      this.pending = 0,
+      this.lastSync,
+      this.error});
+}
+
+class SyncNotifier extends Notifier<SyncState> {
+  StreamSubscription? _sub;
+
+  @override
+  SyncState build() {
+    _sub ??= Connectivity()
+        .onConnectivityChanged
+        .listen((r) => syncNow());
+    ref.onDispose(() => _sub?.cancel());
+    Future.microtask(() => syncNow());
+    return SyncState();
+  }
+
+  bool get isOnline => true; // refined inside syncNow via try/catch
+
+  Future<void> syncNow() async {
+    if (state.status == SyncStatus.syncing) return;
+    state = SyncState(status: SyncStatus.syncing, pending: state.pending);
+    try {
+      await _push();
+      await _pull();
+      final pending = await LocalDb.instance.pendingCount();
+      state = SyncState(
+          status: SyncStatus.idle,
+          pending: pending,
+          lastSync: DateTime.now());
+    } catch (e) {
+      final pending = await LocalDb.instance.pendingCount();
+      state = SyncState(
+          status: pending > 0 ? SyncStatus.error : SyncStatus.idle,
+          pending: pending,
+          lastSync: state.lastSync,
+          error: e.toString());
+    }
+    // notify list screens
+    ref.invalidate(txnListProvider);
+    ref.invalidate(categoryListProvider);
+    ref.invalidate(partyListProvider);
+  }
+
+  Future<void> _push() async {
+    final ops = await LocalDb.instance.pendingOps();
+    final done = <int>[];
+    final supa = ref.read(supaServiceProvider);
+    for (final op in ops) {
+      final qid = op['id'] as int;
+      final table = op['table_name'] as String;
+      final action = op['op'] as String;
+      final recordId = op['record_id'] as String;
+      try {
+        if (action == 'delete') {
+          await supa.deleteRow(table, recordId);
+        } else {
+          final payload =
+              jsonDecode(op['payload'] as String) as Map<String, dynamic>;
+          // upload any pending receipt photo first (was saved offline)
+          if (table == 'transactions') {
+            final local =
+                await LocalDb.instance.getAll('txns');
+            final hit =
+                local.where((e) => e['id'] == recordId);
+            if (hit.isNotEmpty) {
+              final lp = hit.first['receipt_local'] as String?;
+              if (lp != null && lp.isNotEmpty) {
+                final url = await supa.uploadReceipt(lp);
+                payload['receipt_url'] = url;
+                hit.first['receipt_url'] = url;
+                hit.first['receipt_local'] = null;
+                await LocalDb.instance
+                    .upsertAll('txns', [hit.first]);
+              }
+            }
+          }
+          // strip local-only columns before sending
+          payload.remove('category_name');
+          payload.remove('party_name');
+          payload.remove('receipt_local');
+          if (action == 'insert') {
+            await supa.insertRow(table, payload);
+          } else {
+            await supa.updateRow(table, recordId, payload);
+          }
+        }
+        done.add(qid);
+      } catch (e) {
+        // RLS violation or gone remote: drop the op so the queue never jams.
+        // A re-pull right after restores the true server state.
+        done.add(qid);
+      }
+    }
+    await LocalDb.instance.dropOps(done);
+  }
+
+  static const _tables = ['categories', 'parties', 'transactions', 'profiles'];
+
+  /// Local column allow-list per table (remote rows carry extra columns
+  /// like created_at / created_by which don't exist locally).
+  static const _localCols = {
+    'profiles': {'id', 'email', 'name', 'role', 'updated_at'},
+    'categories': {'id', 'name', 'type', 'color', 'updated_at'},
+    'parties': {'id', 'name', 'kind', 'phone', 'email', 'notes', 'updated_at'},
+    'transactions': {
+      'id', 'type', 'amount', 'category_id', 'party_id', 'date',
+      'description', 'payment_method', 'receipt_url', 'created_by',
+      'updated_at'
+    },
+  };
+
+  Map<String, dynamic> _localize(String table, Map<String, dynamic> row) {
+    final keep = _localCols[table]!;
+    return {for (final k in keep) k: row[k]};
+  }
+
+  Future<void> _pull() async {
+    final supa = ref.read(supaServiceProvider);
+    final db = LocalDb.instance;
+    for (final t in _tables) {
+      final sinceStr = await db.kvGet('last_pull_$t');
+      final since = sinceStr == null
+          ? DateTime.fromMillisecondsSinceEpoch(0)
+          : DateTime.parse(sinceStr);
+      final rows = await supa.selectSince(t, since);
+      if (rows.isNotEmpty) {
+        final local = t == 'transactions' ? 'txns' : t;
+        if (t == 'transactions') {
+          // denormalize names for offline display
+          final cats = {for (final c in await db.getAll('categories')) c['id']: c['name']};
+          final prs = {for (final p in await db.getAll('parties')) p['id']: p['name']};
+          for (final r in rows) {
+            r['category_name'] = cats[r['category_id']] ?? '';
+            r['party_name'] = prs[r['party_id']] ?? '';
+          }
+          await db.upsertAll('txns', [
+            for (final r in rows)
+              _localize(t, r)
+                ..['category_name'] = r['category_name']
+                ..['party_name'] = r['party_name']
+          ]);
+        } else {
+          await db.upsertAll(local, [for (final r in rows) _localize(t, r)]);
+        }
+        await db.kvSet('last_pull_$t', DateTime.now().toUtc().toIso8601String());
+      }
+      // reconcile deletes (no tombstones — small dataset, full id list is cheap)
+      final remoteIds = (await supa.allIds(t)).toSet();
+      await db.deleteMissing(t == 'transactions' ? 'txns' : t, remoteIds);
+    }
+  }
+}
+
+final syncProvider = NotifierProvider<SyncNotifier, SyncState>(SyncNotifier.new);
+
+// ==================== TRANSACTIONS ====================
+
+final txnListProvider = FutureProvider<List<Txn>>((ref) async {
+  final rows = await LocalDb.instance
+      .getAll('txns', orderBy: 'date DESC, updated_at DESC');
+  return rows.map(Txn.fromMap).toList();
+});
+
+class TxnRepo {
+  TxnRepo(this._ref);
+  final Ref _ref;
+
+  Future<void> add(Txn t) async {
+    final db = LocalDb.instance;
+    await db.upsertAll('txns', [t.toLocalMap()]);
+    await db.enqueue('transactions', 'insert', t.id, t.toRemoteMap());
+    _ref.invalidate(txnListProvider);
+    _ref.read(syncProvider.notifier).syncNow();
+  }
+
+  Future<void> update(Txn t) async {
+    final db = LocalDb.instance;
+    await db.upsertAll('txns', [t.toLocalMap()]);
+    await db.enqueue('transactions', 'update', t.id, t.toRemoteMap());
+    _ref.invalidate(txnListProvider);
+    _ref.read(syncProvider.notifier).syncNow();
+  }
+
+  Future<void> remove(String id) async {
+    final db = LocalDb.instance;
+    await db.deleteRow('txns', id);
+    await db.enqueue('transactions', 'delete', id, {'id': id});
+    _ref.invalidate(txnListProvider);
+    _ref.read(syncProvider.notifier).syncNow();
+  }
+}
+
+final txnRepoProvider = Provider((ref) => TxnRepo(ref));
+
+String newId() => _uuid.v4();
+
+// ==================== CATEGORIES ====================
+
+final categoryListProvider = FutureProvider<List<Category>>((ref) async {
+  final rows =
+      await LocalDb.instance.getAll('categories', orderBy: 'name ASC');
+  return rows.map(Category.fromMap).toList();
+});
+
+class CategoryRepo {
+  CategoryRepo(this._ref);
+  final Ref _ref;
+
+  Future<void> add(Category c) async {
+    final db = LocalDb.instance;
+    await db.upsertAll('categories', [c.toMap()]);
+    await db.enqueue('categories', 'insert', c.id, c.toMap());
+    _ref.invalidate(categoryListProvider);
+    _ref.read(syncProvider.notifier).syncNow();
+  }
+
+  Future<void> remove(String id) async {
+    final db = LocalDb.instance;
+    await db.deleteRow('categories', id);
+    await db.enqueue('categories', 'delete', id, {'id': id});
+    _ref.invalidate(categoryListProvider);
+    _ref.read(syncProvider.notifier).syncNow();
+  }
+}
+
+final categoryRepoProvider = Provider((ref) => CategoryRepo(ref));
+
+// ==================== PARTIES ====================
+
+final partyListProvider = FutureProvider<List<Party>>((ref) async {
+  final rows = await LocalDb.instance.getAll('parties', orderBy: 'name ASC');
+  return rows.map(Party.fromMap).toList();
+});
+
+class PartyRepo {
+  PartyRepo(this._ref);
+  final Ref _ref;
+
+  Future<void> add(Party p) async {
+    final db = LocalDb.instance;
+    await db.upsertAll('parties', [p.toMap()]);
+    await db.enqueue('parties', 'insert', p.id, p.toMap());
+    _ref.invalidate(partyListProvider);
+    _ref.read(syncProvider.notifier).syncNow();
+  }
+
+  Future<void> update(Party p) async {
+    final db = LocalDb.instance;
+    await db.upsertAll('parties', [p.toMap()]);
+    await db.enqueue('parties', 'update', p.id, p.toMap());
+    _ref.invalidate(partyListProvider);
+    _ref.read(syncProvider.notifier).syncNow();
+  }
+
+  Future<void> remove(String id) async {
+    final db = LocalDb.instance;
+    await db.deleteRow('parties', id);
+    await db.enqueue('parties', 'delete', id, {'id': id});
+    _ref.invalidate(partyListProvider);
+    _ref.read(syncProvider.notifier).syncNow();
+  }
+}
+
+final partyRepoProvider = Provider((ref) => PartyRepo(ref));
+
+// ==================== USERS (admin) ====================
+
+final userListProvider = FutureProvider<List<AppUser>>((ref) async {
+  // always fresh from server — admin-only screen, admin is online here
+  final rows = await ref.read(supaServiceProvider).selectSince('profiles', null);
+  rows.sort((a, b) => (a['email'] as String).compareTo(b['email'] as String));
+  return rows.map(AppUser.fromMap).toList();
+});
+
+class UserRepo {
+  UserRepo(this._ref);
+  final Ref _ref;
+
+  Future<void> setRole(String userId, String role) async {
+    await _ref
+        .read(supaServiceProvider)
+        .updateRow('profiles', userId, {'role': role});
+    // keep local cache consistent
+    final db = LocalDb.instance;
+    final rows = await db.getAll('profiles');
+    for (final r in rows.where((e) => e['id'] == userId)) {
+      r['role'] = role;
+      await db.upsertAll('profiles', [r]);
+    }
+    _ref.invalidate(userListProvider);
+    _ref.invalidate(profileProvider);
+  }
+}
+
+final userRepoProvider = Provider((ref) => UserRepo(ref));
