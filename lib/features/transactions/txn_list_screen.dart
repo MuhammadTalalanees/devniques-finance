@@ -15,11 +15,11 @@ class TxnListScreen extends ConsumerStatefulWidget {
 }
 
 class _TxnListScreenState extends ConsumerState<TxnListScreen> {
-  String _filter = 'all'; // all | income | expense
+  String _filter = 'all'; // all | debit | credit | investment
   String _query = '';
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final txns = ref.watch(txnListProvider);
     final profile = ref.watch(profileProvider);
 
@@ -42,8 +42,9 @@ class _TxnListScreenState extends ConsumerState<TxnListScreen> {
             child: SegmentedButton<String>(
               segments: const [
                 ButtonSegment(value: 'all', label: Text('All')),
-                ButtonSegment(value: 'income', label: Text('Income')),
-                ButtonSegment(value: 'expense', label: Text('Expense')),
+                ButtonSegment(value: 'debit', label: Text('Expenses')),
+                ButtonSegment(value: 'credit', label: Text('Credits')),
+                ButtonSegment(value: 'investment', label: Text('Investments')),
               ],
               selected: {_filter},
               onSelectionChanged: (s) =>
@@ -65,7 +66,7 @@ class _TxnListScreenState extends ConsumerState<TxnListScreen> {
                 if (_query.isNotEmpty) {
                   items = items.where((t) {
                     final hay =
-                        '${t.description} ${t.categoryName} ${t.partyName}'
+                        '${t.description} ${t.categoryName} ${t.partyName} ${t.investor}'
                             .toLowerCase();
                     return hay.contains(_query);
                   }).toList();
@@ -101,25 +102,135 @@ class _TxnTile extends ConsumerWidget {
   final bool canModify;
   const _TxnTile({required this.txn, required this.canModify});
 
+  /// Look up the display name for a user ID (for "Added by" info).
+  Future<String> _addedByName(WidgetRef ref, String userId) async {
+    try {
+      final users = await ref.read(userListProvider.future);
+      final match = users.where((u) => u.id == userId);
+      if (match.isNotEmpty) {
+        final u = match.first;
+        return u.name.isEmpty ? u.email : u.name;
+      }
+    } catch (_) {}
+    return userId.substring(0, userId.length > 8 ? 8 : userId.length);
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final color = txn.isIncome ? AppTheme.income : AppTheme.expense;
+    final color = txn.isDebit
+        ? AppTheme.expense
+        : (txn.isInvestment ? AppTheme.investment : AppTheme.income);
+    final icon = txn.isDebit
+        ? Icons.arrow_upward
+        : (txn.isInvestment ? Icons.savings : Icons.arrow_downward);
+    final scope = txn.isInvestment
+        ? txn.investor
+        : (txn.categoryName.isEmpty ? txn.partyName : txn.categoryName);
+    // Payment method badge (Cash, Bank, etc.) - always visible
+    final paymentBadge = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppTheme.primary.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.primary.withValues(alpha: 0.3)),
+      ),
+      child: Text(
+        txn.paymentMethod.isEmpty ? 'Cash' : txn.paymentMethod,
+        style: TextStyle(
+          color: AppTheme.primary,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
     final tile = ListTile(
       leading: CircleAvatar(
-        backgroundColor: color.withOpacity(0.15),
-        child: Icon(
-            txn.isIncome ? Icons.arrow_downward : Icons.arrow_upward,
-            color: color, size: 20),
+        backgroundColor: color.withValues(alpha: 0.15),
+        child: Icon(icon, color: color, size: 20),
       ),
-      title: Text(
-          txn.description.isEmpty ? txn.categoryName : txn.description,
-          maxLines: 1, overflow: TextOverflow.ellipsis),
-      subtitle: Text(
-          '${txn.categoryName}${txn.partyName.isEmpty ? '' : ' · ${txn.partyName}'} · ${fmtDate(txn.date)}'),
-      trailing: Text(
-        '${txn.isIncome ? '+' : '−'} ${fmtMoney(txn.amount)}',
-        style: TextStyle(
-            color: color, fontWeight: FontWeight.bold, fontSize: 14),
+      title: Row(
+        children: [
+          Expanded(
+            child: Text(
+                txn.description.isEmpty ? scope : txn.description,
+                maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
+          const SizedBox(width: 8),
+          paymentBadge,
+        ],
+      ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+              '${scope.isEmpty ? '—' : scope} · ${fmtDate(txn.date)}'),
+          if (txn.partyName.isNotEmpty && txn.categoryName.isNotEmpty)
+            Text(
+              'Party: ${txn.partyName}',
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            ),
+          if (canModify && txn.createdBy.isNotEmpty)
+            FutureBuilder<String>(
+              future: _addedByName(ref, txn.createdBy),
+              builder: (_, snap) => snap.hasData
+                  ? Text(
+                      'Added by: ${snap.data}',
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey[500],
+                          fontStyle: FontStyle.italic),
+                    )
+                  : const SizedBox.shrink(),
+            ),
+        ],
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '${txn.isDebit ? '−' : '+'} ${fmtMoney(txn.amount)}',
+            style: TextStyle(
+                color: color, fontWeight: FontWeight.bold, fontSize: 14),
+          ),
+          if (canModify) ...[
+            const SizedBox(width: 4),
+            IconButton(
+              icon: const Icon(Icons.edit, size: 20),
+              color: AppTheme.primary,
+              tooltip: 'Edit',
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => TxnFormScreen(existing: txn))),
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete, size: 20),
+              color: Colors.redAccent,
+              tooltip: 'Delete',
+              onPressed: () async {
+                final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (_) => AlertDialog(
+                        title: const Text('Delete entry?'),
+                        content: const Text('This cannot be undone.'),
+                        actions: [
+                          TextButton(
+                              onPressed: () =>
+                                  Navigator.pop(context, false),
+                              child: const Text('Cancel')),
+                          FilledButton(
+                              onPressed: () =>
+                                  Navigator.pop(context, true),
+                              child: const Text('Delete')),
+                        ],
+                      ),
+                    ) ??
+                    false;
+                if (confirm) {
+                  await ref.read(txnRepoProvider).remove(txn.id);
+                }
+              },
+            ),
+          ],
+        ],
       ),
       onTap: canModify
           ? () => Navigator.of(context).push(MaterialPageRoute(

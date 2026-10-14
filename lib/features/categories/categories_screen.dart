@@ -11,17 +11,43 @@ class CategoriesScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cats = ref.watch(categoryListProvider);
+    final profile = ref.watch(profileProvider);
+    final canAdd =
+        profile.whenData((p) => p?.canAdd ?? false).value ?? false;
     return Scaffold(
       appBar: AppBar(title: const Text('Categories')),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showAdd(context, ref),
-        child: const Icon(Icons.add),
-      ),
+      floatingActionButton: canAdd
+          ? FloatingActionButton(
+              onPressed: () => _showAdd(context, ref),
+              child: const Icon(Icons.add),
+            )
+          : null,
       body: cats.when(
         loading: () =>
             const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Error: $e')),
-        data: (list) => ListView.builder(
+        data: (list) {
+          if (list.isEmpty) {
+            // Empty on first load usually means sync hasn't pulled yet.
+            // Offer a one-tap refresh instead of making the user reload.
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text('No categories yet.'),
+                  const SizedBox(height: 12),
+                  FilledButton.icon(
+                    onPressed: () => ref
+                        .read(syncProvider.notifier)
+                        .syncNow(),
+                    icon: const Icon(Icons.sync),
+                    label: const Text('Sync now'),
+                  ),
+                ],
+              ),
+            );
+          }
+          return ListView.builder(
           itemCount: list.length,
           itemBuilder: (_, i) {
             final c = list[i];
@@ -59,7 +85,7 @@ class CategoriesScreen extends ConsumerWidget {
                   ref.read(categoryRepoProvider).remove(c.id),
               child: ListTile(
                 leading: CircleAvatar(
-                    backgroundColor: Colors.blue.withOpacity(0.15),
+                    backgroundColor: Colors.blue.withValues(alpha: 0.15),
                     child: const Icon(Icons.label_outline,
                         color: Colors.blue)),
                 title: Text(c.name),
@@ -67,7 +93,8 @@ class CategoriesScreen extends ConsumerWidget {
               ),
             );
           },
-        ),
+          );
+        },
       ),
     );
   }

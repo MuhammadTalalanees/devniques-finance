@@ -10,6 +10,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../core/formatters.dart';
 import '../../data/models.dart';
 import '../../data/repos.dart';
+import '../../core/theme.dart';
 
 /// Monthly report with PDF + CSV export.
 class ReportsScreen extends ConsumerStatefulWidget {
@@ -53,11 +54,11 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
         error: (e, _) => Center(child: Text('Error: $e')),
         data: (all) {
           final list = _forMonth(all);
-          final income = list
-              .where((t) => t.isIncome)
+          final inflow = list
+              .where((t) => t.isInflow)
               .fold(0.0, (a, t) => a + t.amount);
           final expense = list
-              .where((t) => !t.isIncome)
+              .where((t) => t.isDebit)
               .fold(0.0, (a, t) => a + t.amount);
           return Column(
             children: [
@@ -94,10 +95,10 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                       mainAxisAlignment:
                           MainAxisAlignment.spaceAround,
                       children: [
-                        _Total('Income', income, Colors.green),
-                        _Total('Expense', expense, Colors.red),
-                        _Total('Net', income - expense,
-                            Colors.blue),
+                        _Total('Inflow', inflow, AppTheme.income),
+                        _Total('Expense', expense, AppTheme.expense),
+                        _Total('Net', inflow - expense,
+                            AppTheme.primary),
                       ],
                     ),
                   ),
@@ -120,11 +121,11 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
                             subtitle: Text(
                                 '${fmtDate(t.date)} · ${t.categoryName}'),
                             trailing: Text(
-                              '${t.isIncome ? '+' : '−'} ${fmtMoney(t.amount)}',
+                              '${t.isDebit ? '−' : '+'} ${fmtMoney(t.amount)}',
                               style: TextStyle(
-                                  color: t.isIncome
-                                      ? Colors.green
-                                      : Colors.red,
+                                  color: t.isDebit
+                                      ? AppTheme.expense
+                                      : AppTheme.income,
                                   fontWeight: FontWeight.bold),
                             ),
                           );
@@ -142,10 +143,10 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
       BuildContext context, WidgetRef ref) async {
     final all = await ref.read(txnListProvider.future);
     final list = _forMonth(all);
-    final income =
-        list.where((t) => t.isIncome).fold(0.0, (a, t) => a + t.amount);
+    final inflow =
+        list.where((t) => t.isInflow).fold(0.0, (a, t) => a + t.amount);
     final expense = list
-        .where((t) => !t.isIncome)
+        .where((t) => t.isDebit)
         .fold(0.0, (a, t) => a + t.amount);
 
     final doc = pw.Document();
@@ -163,24 +164,48 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
             mainAxisAlignment:
                 pw.MainAxisAlignment.spaceBetween,
             children: [
-              pw.Text('Income: ${fmtMoney(income)}'),
+              pw.Text('Inflow: ${fmtMoney(inflow)}'),
               pw.Text('Expense: ${fmtMoney(expense)}'),
-              pw.Text('Net: ${fmtMoney(income - expense)}'),
+              pw.Text('Net: ${fmtMoney(inflow - expense)}'),
             ]),
         pw.SizedBox(height: 12),
         pw.TableHelper.fromTextArray(
           headers: const [
-            'Date', 'Type', 'Category', 'Party', 'Description', 'Amount'
+            'Date',
+            'Particulars',
+            'Category / Investor',
+            'Debit (Rs.)',
+            'Credit (Rs.)',
+            'Balance (Rs.)'
           ],
           data: [
             for (final t in list)
               [
                 fmtDate(t.date),
-                t.type,
-                t.categoryName,
-                t.partyName,
-                t.description,
-                fmtMoney(t.amount),
+                t.description.isEmpty
+                    ? (t.partyName.isEmpty
+                        ? t.categoryName
+                        : t.partyName)
+                    : t.description,
+                t.isDebit
+                    ? (t.categoryName.isEmpty
+                        ? 'Uncategorized'
+                        : t.categoryName)
+                    : (t.investor.isEmpty
+                        ? 'General'
+                        : t.investor),
+                t.isDebit ? fmtMoney(t.amount) : '—',
+                t.isInflow ? fmtMoney(t.amount) : '—',
+                fmtMoney(
+                    list
+                            .where((x) =>
+                                !x.date.isAfter(t.date))
+                            .fold(
+                                0.0,
+                                (a, x) => a +
+                                    (x.isInflow
+                                        ? x.amount
+                                        : -x.amount))),
               ],
           ],
           cellStyle: const pw.TextStyle(fontSize: 9),
@@ -199,10 +224,25 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> {
   Future<void> _exportCsv(WidgetRef ref) async {
     final all = await ref.read(txnListProvider.future);
     final list = _forMonth(all);
-    final sb = StringBuffer('Date,Type,Category,Party,Description,Method,Amount\n');
-    for (final t in list) {
+    // Columns match Devniques_Account_Management.html export.
+    final sb = StringBuffer(
+        '\uFEFFDate,Particulars,Category / Investor,Debit (Rs.),Credit (Rs.),Running Balance (Rs.),Document URL\n');
+    double runningBalance = 0;
+    // Sort oldest first for running balance.
+    final sorted = list.toList()
+      ..sort((a, b) => a.date.compareTo(b.date));
+    for (final t in sorted) {
+      final dr = t.isDebit ? t.amount : 0;
+      final cr = t.isInflow ? t.amount : 0;
+      runningBalance += (cr - dr);
+      final tag = t.isDebit
+          ? (t.categoryName.isEmpty ? 'Uncategorized' : t.categoryName)
+          : (t.investor.isEmpty ? 'General' : t.investor);
+      final desc = t.description.isEmpty
+          ? (t.partyName.isEmpty ? tag : t.partyName)
+          : t.description;
       sb.write(
-          '${t.date.toIso8601String().substring(0, 10)},${t.type},"${t.categoryName}","${t.partyName}","${t.description.replaceAll('"', "'")}",${t.paymentMethod},${t.amount}\n');
+          '"${t.date.toIso8601String().substring(0, 10)}","${desc.replaceAll('"', '""')}","${tag.replaceAll('"', '""')}",$dr,$cr,$runningBalance,"${t.receiptUrl ?? ''}"\n');
     }
     await Share.shareXFiles(
       [XFile.fromData(
@@ -225,8 +265,8 @@ class _Total extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(children: [
       Text(label,
-          style: TextStyle(
-              color: Colors.white.withOpacity(0.6),
+          style: const TextStyle(
+              color: AppTheme.muted,
               fontSize: 12)),
       Text(fmtMoney(value),
           style: TextStyle(

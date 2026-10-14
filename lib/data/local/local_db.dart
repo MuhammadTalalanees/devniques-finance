@@ -1,7 +1,9 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 
 /// Offline-first local store (SQLite via sqflite).
 /// Mirrors the Supabase tables + a sync queue + a kv store.
@@ -12,20 +14,54 @@ class LocalDb {
 
   Future<Database> get db async {
     if (_db != null) return _db!;
-    final dir = await getDatabasesPath();
+    // Web: getDatabasesPath() doesn't exist in the browser — the FFI-web
+    // factory takes a plain name and persists it in IndexedDB itself.
+    final String path;
+    if (kIsWeb) {
+      // No-web-worker variant: SQLite runs directly in the page, no
+      // shared-worker message channel (that path returns null here).
+      databaseFactory = databaseFactoryFfiWebNoWebWorker;
+      path = 'devniques_finance.db';
+    } else {
+      final dir = await getDatabasesPath();
+      path = p.join(dir, 'devniques_finance.db');
+    }
     _db = await openDatabase(
-      p.join(dir, 'devniques_finance.db'),
-      version: 1,
+      path,
+      version: 4,
       onCreate: _create,
+      onUpgrade: _upgrade,
     );
     return _db!;
+  }
+
+  Future<void> _upgrade(Database db, int oldV, int newV) async {
+    if (oldV < 2) {
+      // v2: investor name column for 'investment' entries.
+      await db.execute(
+          "ALTER TABLE txns ADD COLUMN investor TEXT NOT NULL DEFAULT ''");
+    }
+    if (oldV < 3) {
+      // v3: petty_cash table for small day-to-day expenses.
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS petty_cash(
+          id TEXT PRIMARY KEY, amount REAL NOT NULL,
+          description TEXT NOT NULL DEFAULT '',
+          date TEXT NOT NULL,
+          created_by TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL)''');
+    }
+    if (oldV < 4) {
+      // v4: kind column — 'fund' (money added in) vs 'spend' (money spent).
+      await db.execute(
+          "ALTER TABLE petty_cash ADD COLUMN kind TEXT NOT NULL DEFAULT 'spend'");
+    }
   }
 
   Future<void> _create(Database db, int version) async {
     await db.execute('''
       CREATE TABLE profiles(
         id TEXT PRIMARY KEY, email TEXT NOT NULL, name TEXT NOT NULL DEFAULT '',
-        role TEXT NOT NULL DEFAULT 'staff', updated_at TEXT NOT NULL)''');
+        role TEXT NOT NULL DEFAULT 'view_only', updated_at TEXT NOT NULL)''');
     await db.execute('''
       CREATE TABLE categories(
         id TEXT PRIMARY KEY, name TEXT NOT NULL, type TEXT NOT NULL DEFAULT 'both',
@@ -40,9 +76,16 @@ class LocalDb {
         id TEXT PRIMARY KEY, type TEXT NOT NULL, amount REAL NOT NULL,
         category_id TEXT, category_name TEXT NOT NULL DEFAULT '',
         party_id TEXT, party_name TEXT NOT NULL DEFAULT '',
+        investor TEXT NOT NULL DEFAULT '',
         date TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
         payment_method TEXT NOT NULL DEFAULT 'Cash',
         receipt_url TEXT, receipt_local TEXT,
+        created_by TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL)''');
+    await db.execute('''
+      CREATE TABLE petty_cash(
+        id TEXT PRIMARY KEY, amount REAL NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        date TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'spend',
         created_by TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL)''');
     await db.execute('''
       CREATE TABLE sync_queue(

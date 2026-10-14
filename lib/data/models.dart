@@ -15,7 +15,7 @@ class AppUser {
   final String id;
   final String email;
   final String name;
-  final String role; // 'admin' | 'staff'
+  final String role; // 'admin' | 'add_only' | 'view_only'
   final DateTime updatedAt;
 
   AppUser({
@@ -27,12 +27,14 @@ class AppUser {
   });
 
   bool get isAdmin => role == 'admin';
+  bool get canAdd => role == 'admin' || role == 'add_only';
+  bool get isViewOnly => role == 'view_only';
 
   factory AppUser.fromMap(Map<String, dynamic> m) => AppUser(
         id: m['id'] as String,
         email: (m['email'] ?? '') as String,
         name: (m['name'] ?? '') as String,
-        role: (m['role'] ?? 'staff') as String,
+        role: (m['role'] ?? 'view_only') as String,
         updatedAt: m['updated_at'] != null
             ? _dt(m['updated_at'])
             : DateTime.fromMillisecondsSinceEpoch(0),
@@ -127,12 +129,13 @@ class Party {
 
 class Txn {
   final String id;
-  final String type; // 'income' | 'expense'
+  final String type; // 'debit' | 'credit' | 'investment'
   final double amount;
   final String? categoryId;
   final String categoryName; // denormalized for offline display
   final String? partyId;
   final String partyName; // denormalized
+  final String investor; // investor name for 'investment' entries
   final DateTime date;
   final String description;
   final String paymentMethod;
@@ -149,6 +152,7 @@ class Txn {
     this.categoryName = '',
     this.partyId,
     this.partyName = '',
+    this.investor = '',
     required this.date,
     this.description = '',
     this.paymentMethod = 'Cash',
@@ -158,16 +162,20 @@ class Txn {
     required this.updatedAt,
   });
 
-  bool get isIncome => type == 'income';
+  /// Money coming in (credit or investment) vs money going out (debit).
+  bool get isInflow => type == 'credit' || type == 'investment';
+  bool get isInvestment => type == 'investment';
+  bool get isDebit => type == 'debit';
 
   factory Txn.fromMap(Map<String, dynamic> m) => Txn(
         id: m['id'] as String,
-        type: (m['type'] ?? 'expense') as String,
+        type: (m['type'] ?? 'debit') as String,
         amount: _num(m['amount']),
         categoryId: m['category_id'] as String?,
         categoryName: (m['category_name'] ?? '') as String,
         partyId: m['party_id'] as String?,
         partyName: (m['party_name'] ?? '') as String,
+        investor: (m['investor'] ?? '') as String,
         date: m['date'] is DateTime
             ? m['date'] as DateTime
             : DateTime.parse('${m['date']}'),
@@ -190,6 +198,7 @@ class Txn {
         'category_name': categoryName,
         'party_id': partyId,
         'party_name': partyName,
+        'investor': investor,
         'date': date.toIso8601String().substring(0, 10),
         'description': description,
         'payment_method': paymentMethod,
@@ -206,11 +215,71 @@ class Txn {
         'amount': amount,
         'category_id': categoryId,
         'party_id': partyId,
+        'investor': investor,
         'date': date.toIso8601String().substring(0, 10),
         'description': description,
         'payment_method': paymentMethod,
         'receipt_url': receiptUrl,
         'created_by': createdBy,
         'updated_at': _iso(updatedAt),
+      };
+}
+
+/// Petty cash entry: small day-to-day expenses (lunch, etc.).
+/// Stored in its own table so small expenses are viewable separately.
+class PettyCash {
+  final String id;
+  final double amount;
+  final String description;
+  final DateTime date;
+  final String createdBy;
+  final DateTime updatedAt;
+  /// 'fund' = money added INTO petty cash, 'spend' = money spent FROM it.
+  final String kind;
+
+  PettyCash({
+    required this.id,
+    required this.amount,
+    this.description = '',
+    required this.date,
+    required this.createdBy,
+    required this.updatedAt,
+    this.kind = 'spend',
+  });
+
+  bool get isFund => kind == 'fund';
+
+  factory PettyCash.fromMap(Map<String, dynamic> m) => PettyCash(
+        id: m['id'] as String,
+        amount: _num(m['amount']),
+        description: (m['description'] ?? '') as String,
+        date: m['date'] is DateTime
+            ? m['date'] as DateTime
+            : DateTime.parse('${m['date']}'),
+        createdBy: (m['created_by'] ?? '') as String,
+        updatedAt: m['updated_at'] != null
+            ? _dt(m['updated_at'])
+            : DateTime.fromMillisecondsSinceEpoch(0),
+        kind: (m['kind'] ?? 'spend') as String,
+      );
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'amount': amount,
+        'description': description,
+        'date': date.toIso8601String().substring(0, 10),
+        'created_by': createdBy,
+        'updated_at': _iso(updatedAt),
+        'kind': kind,
+      };
+
+  Map<String, dynamic> toRemoteMap() => {
+        'id': id,
+        'amount': amount,
+        'description': description,
+        'date': date.toIso8601String().substring(0, 10),
+        'created_by': createdBy,
+        'updated_at': _iso(updatedAt),
+        'kind': kind,
       };
 }

@@ -6,11 +6,12 @@
 class AppConfig {
   static const supabaseUrl = String.fromEnvironment(
     'SUPABASE_URL',
-    defaultValue: 'https://YOUR-PROJECT.supabase.co',
+    defaultValue: 'https://cbjmhkfqeeprcuqyyxrt.supabase.co',
   );
   static const supabaseAnonKey = String.fromEnvironment(
     'SUPABASE_ANON_KEY',
-    defaultValue: 'YOUR-ANON-KEY',
+    defaultValue:
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNiam1oa2ZxZWVwcmN1cXl5eHJ0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE3ODYzNTksImV4cCI6MjEwNzM2MjM1OX0.flkrszZyeJyrVPliGrxSSmhE-hW_4UgUKxdRHqLuANI',
   );
 
   static bool get isConfigured =>

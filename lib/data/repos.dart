@@ -32,11 +32,28 @@ final profileProvider = FutureProvider<AppUser?>((ref) async {
       final hit = local.where((e) => e['id'] == user.id);
       if (hit.isNotEmpty) return AppUser.fromMap(hit.first);
       try {
-        final rows = await ref
-            .read(supaServiceProvider)
-            .selectSince('profiles', null);
+        final supa = ref.read(supaServiceProvider);
+        final rows = await supa.selectSince('profiles', null);
         final me = rows.where((e) => e['id'] == user.id);
-        if (me.isEmpty) return null;
+        if (me.isEmpty) {
+          // No profile row yet (fresh registration) — create one
+          // as view_only. Admin can promote later.
+          final now = DateTime.now();
+          final p = AppUser(
+            id: user.id,
+            email: user.email ?? '',
+            name: (user.userMetadata?['name'] as String?) ?? '',
+            role: 'view_only',
+            updatedAt: now,
+          );
+          try {
+            await supa.insertRow('profiles', p.toMap());
+          } catch (_) {
+            // RLS may block; still cache locally so the app works.
+          }
+          await LocalDb.instance.upsertAll('profiles', [p.toMap()]);
+          return p;
+        }
         final p = AppUser.fromMap(me.first);
         await LocalDb.instance.upsertAll('profiles', [p.toMap()]);
         return p;
@@ -82,6 +99,21 @@ class SyncNotifier extends Notifier<SyncState> {
 
   Future<void> syncNow() async {
     if (state.status == SyncStatus.syncing) return;
+    // Fast offline exit — the UI is local-first anyway; no point waiting
+    // on network timeouts when there is no connection at all.
+    try {
+      final conn = await Connectivity().checkConnectivity();
+      if (conn.contains(ConnectivityResult.none)) {
+        final pending = await LocalDb.instance.pendingCount();
+        state = SyncState(
+            status: SyncStatus.idle,
+            pending: pending,
+            lastSync: state.lastSync);
+        return;
+      }
+    } catch (_) {
+      // connectivity_plus unavailable — fall through to try/catch below.
+    }
     state = SyncState(status: SyncStatus.syncing, pending: state.pending);
     try {
       await _push();
@@ -167,7 +199,7 @@ class SyncNotifier extends Notifier<SyncState> {
     'categories': {'id', 'name', 'type', 'color', 'updated_at'},
     'parties': {'id', 'name', 'kind', 'phone', 'email', 'notes', 'updated_at'},
     'transactions': {
-      'id', 'type', 'amount', 'category_id', 'party_id', 'date',
+      'id', 'type', 'amount', 'category_id', 'party_id', 'investor', 'date',
       'description', 'payment_method', 'receipt_url', 'created_by',
       'updated_at'
     },
@@ -181,36 +213,53 @@ class SyncNotifier extends Notifier<SyncState> {
   Future<void> _pull() async {
     final supa = ref.read(supaServiceProvider);
     final db = LocalDb.instance;
-    for (final t in _tables) {
-      final sinceStr = await db.kvGet('last_pull_$t');
-      final since = sinceStr == null
-          ? DateTime.fromMillisecondsSinceEpoch(0)
-          : DateTime.parse(sinceStr);
-      final rows = await supa.selectSince(t, since);
-      if (rows.isNotEmpty) {
-        final local = t == 'transactions' ? 'txns' : t;
-        if (t == 'transactions') {
-          // denormalize names for offline display
-          final cats = {for (final c in await db.getAll('categories')) c['id']: c['name']};
-          final prs = {for (final p in await db.getAll('parties')) p['id']: p['name']};
-          for (final r in rows) {
-            r['category_name'] = cats[r['category_id']] ?? '';
-            r['party_name'] = prs[r['party_id']] ?? '';
-          }
-          await db.upsertAll('txns', [
-            for (final r in rows)
-              _localize(t, r)
-                ..['category_name'] = r['category_name']
-                ..['party_name'] = r['party_name']
-          ]);
-        } else {
-          await db.upsertAll(local, [for (final r in rows) _localize(t, r)]);
+    // Wave 1: reference tables concurrently (was: 4 sequential round-trips).
+    await Future.wait(
+        ['categories', 'parties', 'profiles'].map((t) => _pullTable(supa, db, t)));
+    // Wave 2: transactions need categories/parties for name denormalization.
+    await _pullTable(supa, db, 'transactions');
+    // Reconcile deletes at most once per hour — deletes are rare, and
+    // fetching full id lists on every launch is pure overhead.
+    final lastReconcileStr = await db.kvGet('last_reconcile');
+    final lastReconcile = lastReconcileStr == null
+        ? DateTime.fromMillisecondsSinceEpoch(0)
+        : DateTime.parse(lastReconcileStr);
+    if (DateTime.now().difference(lastReconcile) > const Duration(hours: 1)) {
+      await Future.wait(_tables.map((t) async {
+        final remoteIds = (await supa.allIds(t)).toSet();
+        await db.deleteMissing(t == 'transactions' ? 'txns' : t, remoteIds);
+      }));
+      await db.kvSet(
+          'last_reconcile', DateTime.now().toUtc().toIso8601String());
+    }
+  }
+
+  Future<void> _pullTable(SupaService supa, LocalDb db, String t) async {
+    final sinceStr = await db.kvGet('last_pull_$t');
+    final since = sinceStr == null
+        ? DateTime.fromMillisecondsSinceEpoch(0)
+        : DateTime.parse(sinceStr);
+    final rows = await supa.selectSince(t, since);
+    if (rows.isNotEmpty) {
+      final local = t == 'transactions' ? 'txns' : t;
+      if (t == 'transactions') {
+        // denormalize names for offline display
+        final cats = {for (final c in await db.getAll('categories')) c['id']: c['name']};
+        final prs = {for (final p in await db.getAll('parties')) p['id']: p['name']};
+        for (final r in rows) {
+          r['category_name'] = cats[r['category_id']] ?? '';
+          r['party_name'] = prs[r['party_id']] ?? '';
         }
-        await db.kvSet('last_pull_$t', DateTime.now().toUtc().toIso8601String());
+        await db.upsertAll('txns', [
+          for (final r in rows)
+            _localize(t, r)
+              ..['category_name'] = r['category_name']
+              ..['party_name'] = r['party_name']
+        ]);
+      } else {
+        await db.upsertAll(local, [for (final r in rows) _localize(t, r)]);
       }
-      // reconcile deletes (no tombstones — small dataset, full id list is cheap)
-      final remoteIds = (await supa.allIds(t)).toSet();
-      await db.deleteMissing(t == 'transactions' ? 'txns' : t, remoteIds);
+      await db.kvSet('last_pull_$t', DateTime.now().toUtc().toIso8601String());
     }
   }
 }
@@ -257,6 +306,39 @@ class TxnRepo {
 final txnRepoProvider = Provider((ref) => TxnRepo(ref));
 
 String newId() => _uuid.v4();
+
+// ==================== PETTY CASH ====================
+
+final pettyCashListProvider =
+    FutureProvider<List<PettyCash>>((ref) async {
+  final rows = await LocalDb.instance
+      .getAll('petty_cash', orderBy: 'date DESC, updated_at DESC');
+  return rows.map(PettyCash.fromMap).toList();
+});
+
+class PettyCashRepo {
+  PettyCashRepo(this._ref);
+  final Ref _ref;
+
+  Future<void> add(PettyCash p) async {
+    final db = LocalDb.instance;
+    await db.upsertAll('petty_cash', [p.toMap()]);
+    await db.enqueue('petty_cash', 'insert', p.id, p.toRemoteMap());
+    _ref.invalidate(pettyCashListProvider);
+    _ref.read(syncProvider.notifier).syncNow();
+  }
+
+  Future<void> remove(String id) async {
+    final db = LocalDb.instance;
+    await db.deleteRow('petty_cash', id);
+    await db.enqueue('petty_cash', 'delete', id, {'id': id});
+    _ref.invalidate(pettyCashListProvider);
+    _ref.read(syncProvider.notifier).syncNow();
+  }
+}
+
+final pettyCashRepoProvider =
+    Provider((ref) => PettyCashRepo(ref));
 
 // ==================== CATEGORIES ====================
 
@@ -353,6 +435,27 @@ class UserRepo {
     }
     _ref.invalidate(userListProvider);
     _ref.invalidate(profileProvider);
+  }
+
+  Future<void> deleteUser(String userId) async {
+    // Delete from Auth + profiles via Edge Function (service-role).
+    // Falls back to profile-only delete if the function isn't deployed.
+    try {
+      await _ref
+          .read(supaServiceProvider)
+          .invokeFunction('delete-user', {'user_id': userId});
+    } catch (_) {
+      try {
+        await _ref
+            .read(supaServiceProvider)
+            .deleteRow('profiles', userId);
+      } catch (_) {
+        // RLS may block; continue with local cleanup.
+      }
+    }
+    final db = LocalDb.instance;
+    await db.deleteRow('profiles', userId);
+    _ref.invalidate(userListProvider);
   }
 }
 

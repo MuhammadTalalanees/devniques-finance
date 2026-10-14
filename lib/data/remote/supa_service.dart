@@ -1,5 +1,6 @@
-import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:cross_file/cross_file.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Thin wrapper around the Supabase client (Postgres + Auth + Storage).
@@ -49,12 +50,35 @@ class SupaService {
   Future<void> deleteRow(String table, String id) =>
       _c.from(table).delete().eq('id', id);
 
+  /// Invoke an Edge Function (e.g. delete-user). Throws on error.
+  Future<Map<String, dynamic>> invokeFunction(
+      String name, Map<String, dynamic> body) async {
+    final res = await _c.functions.invoke(name, body: body);
+    final data = res.data;
+    if (data is Map<String, dynamic>) {
+      if (data['error'] != null) {
+        throw Exception(data['error'].toString());
+      }
+      return data;
+    }
+    return {'ok': true};
+  }
+
   // ---------- receipts ----------
-  Future<String> uploadReceipt(String localPath) async {
+  /// Path-based (mobile offline-retry). Works on all platforms via XFile.
+  Future<String> uploadReceipt(String localPath) async => uploadReceiptBytes(
+      localPath.split('/').last, await XFile(localPath).readAsBytes());
+
+  /// Bytes-based — the web-safe path (no dart:io anywhere).
+  Future<String> uploadReceiptBytes(String fileName, Uint8List bytes) async {
     final name =
-        '${DateTime.now().millisecondsSinceEpoch}_${localPath.split('/').last}';
+        '${DateTime.now().millisecondsSinceEpoch}_$fileName';
     final path = 'receipts/$name';
-    await _c.storage.from('receipts').upload(path, File(localPath));
+    await _c.storage.from('receipts').uploadBinary(
+          path,
+          bytes,
+          fileOptions: const FileOptions(contentType: 'image/jpeg'),
+        );
     return _c.storage.from('receipts').getPublicUrl(path);
   }
 }

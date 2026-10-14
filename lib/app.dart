@@ -19,7 +19,7 @@ class DevniquesFinanceApp extends StatelessWidget {
     return MaterialApp(
       title: 'Devniques Finance',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.dark,
+      theme: AppTheme.light,
       home: const AuthGate(),
     );
   }
@@ -72,6 +72,9 @@ class _MainShellState extends ConsumerState<MainShell> {
   Widget build(BuildContext context) {
     // keep sync engine alive
     ref.watch(syncProvider);
+    final profile = ref.watch(profileProvider);
+    final canAdd =
+        profile.whenData((p) => p?.canAdd ?? false).value ?? false;
     final pages = const [
       DashboardScreen(),
       TxnListScreen(),
@@ -80,7 +83,7 @@ class _MainShellState extends ConsumerState<MainShell> {
     ];
     return Scaffold(
       body: IndexedStack(index: _idx, children: pages),
-      floatingActionButton: _idx == 1
+      floatingActionButton: _idx == 1 && canAdd
           ? FloatingActionButton(
               onPressed: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const TxnFormScreen()),

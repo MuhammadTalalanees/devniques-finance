@@ -1,5 +1,6 @@
-import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -24,11 +25,15 @@ class _TxnFormScreenState extends ConsumerState<TxnFormScreen> {
   late String _type;
   final _amount = TextEditingController();
   final _desc = TextEditingController();
+  final _docUrl = TextEditingController();
   String? _categoryId;
   String? _partyId;
+  String? _investorName; // selected investor name for investments
   DateTime _date = DateTime.now();
   String _method = 'Cash';
   String? _receiptLocal;
+  XFile? _receiptXFile;
+  Uint8List? _receiptBytes;
   bool _busy = false;
 
   bool get _isEdit => widget.existing != null;
@@ -37,10 +42,12 @@ class _TxnFormScreenState extends ConsumerState<TxnFormScreen> {
   void initState() {
     super.initState();
     final e = widget.existing;
-    _type = e?.type ?? 'expense';
+    _type = (e?.type == 'credit' || e?.type == 'investment') ? e!.type : 'debit';
     if (e != null) {
       _amount.text = e.amount.toStringAsFixed(2);
       _desc.text = e.description;
+      _investorName = e.investor.isEmpty ? null : e.investor;
+      _docUrl.text = e.receiptUrl ?? '';
       _categoryId = e.categoryId;
       _partyId = e.partyId;
       _date = e.date;
@@ -49,9 +56,18 @@ class _TxnFormScreenState extends ConsumerState<TxnFormScreen> {
   }
 
   Future<void> _pickReceipt() async {
-    final img = await ImagePicker()
-        .pickImage(source: ImageSource.camera, imageQuality: 70);
-    if (img != null) setState(() => _receiptLocal = img.path);
+    final img = await ImagePicker().pickImage(
+      // Web browsers can't open the camera this way — use the file picker.
+      source: kIsWeb ? ImageSource.gallery : ImageSource.camera,
+      imageQuality: 70,
+    );
+    if (img == null) return;
+    final bytes = await img.readAsBytes();
+    setState(() {
+      _receiptXFile = img;
+      _receiptLocal = img.path;
+      _receiptBytes = bytes;
+    });
   }
 
   Future<void> _save() async {
@@ -65,21 +81,28 @@ class _TxnFormScreenState extends ConsumerState<TxnFormScreen> {
       _snack('Not signed in');
       return;
     }
+    if (_type == 'investment' && (_investorName == null || _investorName!.isEmpty)) {
+      _snack('Select the investor');
+      return;
+    }
     setState(() => _busy = true);
     try {
       String? receiptUrl = widget.existing?.receiptUrl;
       String? receiptLocal = _receiptLocal;
       // Upload now if online; otherwise keep the local path for later sync.
-      if (_receiptLocal != null) {
+      if (_receiptXFile != null && _receiptBytes != null) {
         try {
           receiptUrl = await ref
               .read(supaServiceProvider)
-              .uploadReceipt(_receiptLocal!);
+              .uploadReceiptBytes(_receiptXFile!.name, _receiptBytes!);
           receiptLocal = null;
         } catch (_) {
           // offline — will upload during sync
         }
       }
+      // A pasted document link counts as the receipt when no photo was taken.
+      final docUrl = _docUrl.text.trim();
+      if (receiptUrl == null && docUrl.isNotEmpty) receiptUrl = docUrl;
       final cats = await ref.read(categoryListProvider.future);
       final parties = await ref.read(partyListProvider.future);
       final cat = cats.where((c) => c.id == _categoryId);
@@ -89,10 +112,11 @@ class _TxnFormScreenState extends ConsumerState<TxnFormScreen> {
         id: widget.existing?.id ?? newId(),
         type: _type,
         amount: amount,
-        categoryId: _categoryId,
-        categoryName: cat.isEmpty ? '' : cat.first.name,
+        categoryId: _type == 'debit' ? _categoryId : null,
+        categoryName: _type == 'debit' && cat.isNotEmpty ? cat.first.name : '',
         partyId: _partyId,
         partyName: party.isEmpty ? '' : party.first.name,
+        investor: _type == 'investment' ? (_investorName ?? '') : '',
         date: _date,
         description: _desc.text.trim(),
         paymentMethod: _method,
@@ -131,13 +155,17 @@ class _TxnFormScreenState extends ConsumerState<TxnFormScreen> {
           SegmentedButton<String>(
             segments: const [
               ButtonSegment(
-                  value: 'expense',
+                  value: 'debit',
                   label: Text('Expense'),
                   icon: Icon(Icons.arrow_upward)),
               ButtonSegment(
-                  value: 'income',
-                  label: Text('Income'),
+                  value: 'credit',
+                  label: Text('Credit'),
                   icon: Icon(Icons.arrow_downward)),
+              ButtonSegment(
+                  value: 'investment',
+                  label: Text('Investment'),
+                  icon: Icon(Icons.savings)),
             ],
             selected: {_type},
             onSelectionChanged: (s) =>
@@ -152,29 +180,56 @@ class _TxnFormScreenState extends ConsumerState<TxnFormScreen> {
                 labelText: 'Amount (Rs)', prefixText: 'Rs '),
           ),
           const SizedBox(height: 12),
-          cats.when(
-            data: (list) {
-              final items = list
-                  .where((c) => c.matches(_type))
-                  .toList();
-              return DropdownButtonFormField<String>(
-                initialValue: _categoryId,
-                decoration:
-                    const InputDecoration(labelText: 'Category'),
-                items: items
-                    .map((c) => DropdownMenuItem(
-                        value: c.id, child: Text(c.name)))
-                    .toList(),
-                onChanged: (v) =>
-                    setState(() => _categoryId = v),
-              );
-            },
-            loading: () =>
-                const LinearProgressIndicator(),
-            error: (_, __) =>
-                const Text('Could not load categories'),
-          ),
-          const SizedBox(height: 12),
+          if (_type == 'debit')
+            cats.when(
+              data: (list) {
+                final items = list
+                    .where((c) => c.matches('expense'))
+                    .toList();
+                return DropdownButtonFormField<String>(
+                  initialValue: _categoryId,
+                  decoration: const InputDecoration(
+                      labelText: 'Expense category'),
+                  items: items
+                      .map((c) => DropdownMenuItem(
+                          value: c.id, child: Text(c.name)))
+                      .toList(),
+                  onChanged: (v) =>
+                      setState(() => _categoryId = v),
+                );
+              },
+              loading: () =>
+                  const LinearProgressIndicator(),
+              error: (_, __) =>
+                  const Text('Could not load categories'),
+            ),
+          if (_type == 'investment')
+            parties.when(
+              data: (list) {
+                final investors = list
+                    .where((p) => p.kind == 'investor')
+                    .toList();
+                return DropdownButtonFormField<String>(
+                  initialValue: _investorName,
+                  decoration: const InputDecoration(
+                      labelText: 'Investor'),
+                  items: investors
+                      .map((p) => DropdownMenuItem(
+                          value: p.name,
+                          child: Text(p.name)))
+                      .toList(),
+                  onChanged: (v) =>
+                      setState(() => _investorName = v),
+                  hint: const Text(
+                      'Select investor (add in More → Investors)'),
+                );
+              },
+              loading: () =>
+                  const LinearProgressIndicator(),
+              error: (_, __) =>
+                  const Text('Could not load investors'),
+            ),
+          if (_type != 'credit') const SizedBox(height: 12),
           parties.when(
             data: (list) => DropdownButtonFormField<String>(
               initialValue: _partyId,
@@ -237,11 +292,19 @@ class _TxnFormScreenState extends ConsumerState<TxnFormScreen> {
                 : (widget.existing?.receiptUrl != null
                     ? 'Receipt on file'
                     : 'Attach receipt photo')),
-            trailing: _receiptLocal != null
-                ? Image.file(File(_receiptLocal!),
+            trailing: _receiptBytes != null
+                ? Image.memory(_receiptBytes!,
                     width: 48, height: 48, fit: BoxFit.cover)
                 : null,
             onTap: _pickReceipt,
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _docUrl,
+            keyboardType: TextInputType.url,
+            decoration: const InputDecoration(
+                labelText: 'Receipt / document link (optional)',
+                hintText: 'https://drive.google.com/...'),
           ),
           const SizedBox(height: 20),
           FilledButton(

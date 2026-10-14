@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/repos.dart';
+import '../../core/theme.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -50,7 +51,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const Icon(Icons.account_balance_wallet,
-                    size: 56, color: Color(0xFF2F7FF7)),
+                    size: 56, color: AppTheme.primary),
                 const SizedBox(height: 16),
                 Text('Devniques Finance',
                     style: Theme.of(context)
@@ -61,10 +62,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 const SizedBox(height: 6),
                 Text(
                     _register
-                        ? 'New staff account — starts with add-only access'
+                        ? 'New account — starts with view-only access'
                         : 'Sign in to continue',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Colors.white.withOpacity(0.6)),
+                        color: AppTheme.muted),
                     textAlign: TextAlign.center),
                 const SizedBox(height: 28),
                 if (_register)
@@ -110,7 +111,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       setState(() => _register = !_register),
                   child: Text(_register
                       ? 'Already have an account? Sign in'
-                      : 'New here? Create staff account'),
+                      : 'New here? Create account'),
                 ),
               ],
             ),
