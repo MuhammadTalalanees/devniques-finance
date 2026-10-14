@@ -248,9 +248,13 @@ class _LedgerCard extends ConsumerWidget {
                     style: TextStyle(fontSize: 13)),
               )
             else
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: DataTable(
+              SizedBox(
+                height: 420,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.vertical,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: DataTable(
                   headingRowColor: WidgetStateProperty.all(
                       AppTheme.primary.withValues(alpha: 0.08)),
                   columnSpacing: 16,
@@ -382,6 +386,8 @@ class _LedgerCard extends ConsumerWidget {
                           )),
                       ]),
                   ],
+                    ),
+                  ),
                 ),
               ),
           ],
@@ -986,36 +992,45 @@ class _PettyCashSummary extends ConsumerWidget {
                 if (items.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   const Divider(),
-                  for (final p in items.take(3))
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                          vertical: 2),
-                      child: Row(
+                  SizedBox(
+                    height: 120,
+                    child: SingleChildScrollView(
+                      child: Column(
                         children: [
-                          Expanded(
-                            child: Text(
-                              p.description.isEmpty
-                                  ? (p.isFund
-                                      ? 'Funds added'
-                                      : 'Petty expense')
-                                  : p.description,
-                              style: const TextStyle(
-                                  fontSize: 13),
-                              maxLines: 1,
-                              overflow:
-                                  TextOverflow.ellipsis,
+                          for (final p in items)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: 2),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      p.description.isEmpty
+                                          ? (p.isFund
+                                              ? 'Funds added'
+                                              : 'Petty expense')
+                                          : p.description,
+                                      style: const TextStyle(
+                                          fontSize: 13),
+                                      maxLines: 1,
+                                      overflow:
+                                          TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  Text(
+                                      '${p.isFund ? '+' : '−'} ${fmtMoney(p.amount)}',
+                                      style: TextStyle(
+                                          fontSize: 13,
+                                          color: p.isFund
+                                              ? AppTheme.income
+                                              : AppTheme.expense)),
+                                ],
+                              ),
                             ),
-                          ),
-                          Text(
-                              '${p.isFund ? '+' : '−'} ${fmtMoney(p.amount)}',
-                              style: TextStyle(
-                                  fontSize: 13,
-                                  color: p.isFund
-                                      ? AppTheme.income
-                                      : AppTheme.expense)),
                         ],
                       ),
                     ),
+                  ),
                 ],
                 if (canAdd) ...[
                   const SizedBox(height: 8),
