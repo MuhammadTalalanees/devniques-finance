@@ -28,7 +28,7 @@ class LocalDb {
     }
     _db = await openDatabase(
       path,
-      version: 4,
+      version: 5,
       onCreate: _create,
       onUpgrade: _upgrade,
     );
@@ -54,6 +54,11 @@ class LocalDb {
       // v4: kind column — 'fund' (money added in) vs 'spend' (money spent).
       await db.execute(
           "ALTER TABLE petty_cash ADD COLUMN kind TEXT NOT NULL DEFAULT 'spend'");
+    }
+    if (oldV < 5) {
+      // v5: txn_id column — links a 'fund' entry to its ledger transaction.
+      await db.execute(
+          "ALTER TABLE petty_cash ADD COLUMN txn_id TEXT");
     }
   }
 
@@ -86,6 +91,7 @@ class LocalDb {
         id TEXT PRIMARY KEY, amount REAL NOT NULL,
         description TEXT NOT NULL DEFAULT '',
         date TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'spend',
+        txn_id TEXT,
         created_by TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL)''');
     await db.execute('''
       CREATE TABLE sync_queue(
