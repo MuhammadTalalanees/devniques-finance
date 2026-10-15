@@ -105,16 +105,25 @@ class _TxnListScreenState extends ConsumerState<TxnListScreen> {
         ],
       ),
       floatingActionButton: profile.when(
-        data: (p) => p != null && p.role != 'view_only'
-            ? FloatingActionButton(
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                      builder: (_) =>
-                          TxnFormScreen(initialType: _fabType)),
-                ),
-                child: const Icon(Icons.add),
-              )
-            : null,
+        data: (p) {
+          if (p == null || p.role == 'view_only') return null;
+          final currentFilter = _filter;
+          String formType = 'debit';
+          if (currentFilter == 'credit' ||
+              currentFilter == 'investment' ||
+              currentFilter == 'profit' ||
+              currentFilter == 'debit') {
+            formType = currentFilter;
+          }
+          return FloatingActionButton(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                  builder: (_) =>
+                      TxnFormScreen(initialType: formType)),
+            ),
+            child: const Icon(Icons.add),
+          );
+        },
         loading: () => null,
         error: (_, __) => null,
       ),
