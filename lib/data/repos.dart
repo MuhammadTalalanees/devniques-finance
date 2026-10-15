@@ -135,6 +135,7 @@ class SyncNotifier extends Notifier<SyncState> {
     ref.invalidate(txnListProvider);
     ref.invalidate(categoryListProvider);
     ref.invalidate(partyListProvider);
+    ref.invalidate(pettyCashListProvider);
   }
 
   Future<void> _push() async {
@@ -211,7 +212,7 @@ class SyncNotifier extends Notifier<SyncState> {
     },
     'petty_cash': {
       'id', 'amount', 'description', 'date', 'created_by', 'updated_at',
-      'kind'
+      'kind', 'txn_id'
     },
   };
 
