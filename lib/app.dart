@@ -72,9 +72,6 @@ class _MainShellState extends ConsumerState<MainShell> {
   Widget build(BuildContext context) {
     // keep sync engine alive
     ref.watch(syncProvider);
-    final profile = ref.watch(profileProvider);
-    final canAdd =
-        profile.whenData((p) => p?.canAdd ?? false).value ?? false;
     final pages = const [
       DashboardScreen(),
       TxnListScreen(),
@@ -83,14 +80,6 @@ class _MainShellState extends ConsumerState<MainShell> {
     ];
     return Scaffold(
       body: IndexedStack(index: _idx, children: pages),
-      floatingActionButton: _idx == 1 && canAdd
-          ? FloatingActionButton(
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const TxnFormScreen()),
-              ),
-              child: const Icon(Icons.add),
-            )
-          : null,
       bottomNavigationBar: NavigationBar(
         selectedIndex: _idx,
         onDestinationSelected: (i) => setState(() => _idx = i),
