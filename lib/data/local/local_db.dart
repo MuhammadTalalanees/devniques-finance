@@ -136,6 +136,35 @@ class LocalDb {
     await d.delete(table, where: 'id = ?', whereArgs: [id]);
   }
 
+  /// Delete petty cash fund entries linked to a ledger txn id.
+  /// Returns the ids of deleted rows for sync queueing.
+  Future<List<String>> deletePettyCashByTxnId(String txnId) async {
+    final d = await db;
+    final rows = await d.query('petty_cash',
+        columns: ['id'], where: 'txn_id = ?', whereArgs: [txnId]);
+    final ids = rows.map((r) => r['id'] as String).toList();
+    for (final id in ids) {
+      await d.delete('petty_cash', where: 'id = ?', whereArgs: [id]);
+    }
+    return ids;
+  }
+
+  /// Fallback: delete petty cash fund entries by amount+date
+  /// (for old entries without txn_id link).
+  Future<List<String>> deletePettyCashByAmountDate(
+      double amount, String dateIso) async {
+    final d = await db;
+    final rows = await d.query('petty_cash',
+        columns: ['id'],
+        where: "kind = 'fund' AND amount = ? AND date = ?",
+        whereArgs: [amount, dateIso]);
+    final ids = rows.map((r) => r['id'] as String).toList();
+    for (final id in ids) {
+      await d.delete('petty_cash', where: 'id = ?', whereArgs: [id]);
+    }
+    return ids;
+  }
+
   Future<void> clearAll() async {
     final d = await db;
     for (final t in ['profiles', 'categories', 'parties', 'txns', 'sync_queue', 'kv']) {

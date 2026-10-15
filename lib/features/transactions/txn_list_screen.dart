@@ -263,27 +263,18 @@ class _TxnTile extends ConsumerWidget {
                     false;
                 if (confirm) {
                   // Cascade delete: if this is a petty cash fund entry,
-                  // also delete the linked petty cash record(s)
+                  // also delete the linked petty cash record(s).
+                  // Uses direct DB delete (bypasses provider cache).
                   if (txn.isPettyCashFund) {
-                    final pettyEntries = await ref.read(
-                        pettyCashListProvider.future);
-                    final txnDate = txn.date
-                        .toIso8601String()
-                        .substring(0, 10);
-                    // Match by txnId OR by amount+date (for unlinked old entries)
-                    final toDelete = pettyEntries.where((p) =>
-                        p.isFund &&
-                        (p.txnId == txn.id ||
-                            (p.amount == txn.amount &&
-                                p.date
-                                        .toIso8601String()
-                                        .substring(0, 10) ==
-                                    txnDate)));
-                    for (final pe in toDelete) {
-                      await ref
-                          .read(pettyCashRepoProvider)
-                          .remove(pe.id);
-                    }
+                    await ref
+                        .read(pettyCashRepoProvider)
+                        .removeByTxnId(
+                          txn.id,
+                          amount: txn.amount,
+                          dateIso: txn.date
+                              .toIso8601String()
+                              .substring(0, 10),
+                        );
                   }
                   await ref.read(txnRepoProvider).remove(txn.id);
                   // Force refresh petty cash list

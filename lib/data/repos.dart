@@ -361,6 +361,23 @@ class PettyCashRepo {
     _ref.invalidate(pettyCashListProvider);
     _ref.read(syncProvider.notifier).syncNow();
   }
+
+  /// Delete all petty cash entries linked to a ledger txn id.
+  /// Bypasses provider cache — hits local DB directly.
+  /// Falls back to amount+date matching for old unlinked entries.
+  Future<void> removeByTxnId(String txnId,
+      {double? amount, String? dateIso}) async {
+    final db = LocalDb.instance;
+    var ids = await db.deletePettyCashByTxnId(txnId);
+    if (ids.isEmpty && amount != null && dateIso != null) {
+      ids = await db.deletePettyCashByAmountDate(amount, dateIso);
+    }
+    for (final id in ids) {
+      await db.enqueue('petty_cash', 'delete', id, {'id': id});
+    }
+    _ref.invalidate(pettyCashListProvider);
+    _ref.read(syncProvider.notifier).syncNow();
+  }
 }
 
 final pettyCashRepoProvider =
