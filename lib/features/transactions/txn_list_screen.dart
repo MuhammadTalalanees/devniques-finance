@@ -318,8 +318,17 @@ class _TxnTile extends ConsumerWidget {
             ),
           ) ??
           false,
-      onDismissed: (_) =>
-          ref.read(txnRepoProvider).remove(txn.id),
+      onDismissed: (_) async {
+        if (txn.isPettyCashFund) {
+          await ref.read(pettyCashRepoProvider).removeByTxnId(
+                txn.id,
+                amount: txn.amount,
+                dateIso: txn.date.toIso8601String().substring(0, 10),
+              );
+        }
+        await ref.read(txnRepoProvider).remove(txn.id);
+        ref.invalidate(pettyCashListProvider);
+      },
       child: Card(
           margin:
               const EdgeInsets.symmetric(horizontal: 12, vertical: 4),

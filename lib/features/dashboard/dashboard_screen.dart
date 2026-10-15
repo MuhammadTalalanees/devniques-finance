@@ -440,7 +440,17 @@ class _LedgerCard extends ConsumerWidget {
       ),
     );
     if (ok == true) {
+      // Cascade delete: if this is a petty cash fund entry,
+      // also delete the linked petty cash record(s).
+      if (txn.isPettyCashFund) {
+        await ref.read(pettyCashRepoProvider).removeByTxnId(
+              txn.id,
+              amount: txn.amount,
+              dateIso: txn.date.toIso8601String().substring(0, 10),
+            );
+      }
       await ref.read(txnRepoProvider).remove(txn.id);
+      ref.invalidate(pettyCashListProvider);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Entry deleted.')));
