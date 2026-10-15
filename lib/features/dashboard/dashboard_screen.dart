@@ -154,20 +154,37 @@ class _KpiGrid extends ConsumerWidget {
       error: (_, __) => 0.0,
     );
 
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 8,
-      crossAxisSpacing: 8,
-      childAspectRatio: 2.2,
-      children: [
-        _Kpi('Current Net Balance', fmtMoney(balance), AppTheme.primary),
-        _Kpi('Total Raised Capital', fmtMoney(raised), AppTheme.investment),
-        _Kpi('Total Operational Expenses', fmtMoney(expenses),
-            AppTheme.expense),
-        _Kpi('Petty Cash', fmtMoney(pettyBalance), AppTheme.income),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // On wide screens (web), show 4 in a row; on mobile, 2x2 grid.
+        final isWide = constraints.maxWidth > 600;
+        final kpis = [
+          _Kpi('Current Net Balance', fmtMoney(balance), AppTheme.primary),
+          _Kpi('Total Raised Capital', fmtMoney(raised), AppTheme.investment),
+          _Kpi('Total Operational Expenses', fmtMoney(expenses),
+              AppTheme.expense),
+          _Kpi('Petty Cash', fmtMoney(pettyBalance), AppTheme.income),
+        ];
+        if (isWide) {
+          return Row(
+            children: [
+              for (int i = 0; i < kpis.length; i++) ...[
+                Expanded(child: kpis[i]),
+                if (i < kpis.length - 1) const SizedBox(width: 12),
+              ],
+            ],
+          );
+        }
+        return GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 8,
+          crossAxisSpacing: 8,
+          childAspectRatio: 1.8,
+          children: kpis,
+        );
+      },
     );
   }
 }
@@ -183,22 +200,23 @@ class _Kpi extends StatelessWidget {
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Text(label,
                 style: const TextStyle(
                     color: AppTheme.muted,
-                    fontSize: 10,
+                    fontSize: 11,
                     fontWeight: FontWeight.w600)),
-            const SizedBox(height: 4),
+            const SizedBox(height: 6),
             Text(value,
                 style: TextStyle(
                     color: color,
                     fontWeight: FontWeight.bold,
-                    fontSize: 17)),
+                    fontSize: 20)),
           ],
         ),
       ),
@@ -480,20 +498,6 @@ class _CashSection extends ConsumerWidget {
         cash.where((t) => t.isDebit).fold(0.0, (a, t) => a + t.amount);
     final inHand = cashIn - cashOut;
 
-    final userMap = users.when(
-      data: (list) =>
-          {for (final u in list) u.id: u.name.isEmpty ? u.email : u.name},
-      loading: () => <String, String>{},
-      error: (_, __) => <String, String>{},
-    );
-
-    final byPerson = <String, double>{};
-    for (final t in cash.where((t) => t.isDebit)) {
-      byPerson[t.createdBy] = (byPerson[t.createdBy] ?? 0) + t.amount;
-    }
-    final personEntries = byPerson.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-
     final byCat = <String, double>{};
     for (final t in cash.where((t) => t.isDebit)) {
       final k =
@@ -525,28 +529,6 @@ class _CashSection extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 16),
-            const Text('Cash used by person',
-                style:
-                    TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-            const SizedBox(height: 8),
-            if (personEntries.isEmpty)
-              const Text('No cash spending yet.',
-                  style: TextStyle(fontSize: 13)),
-            for (final e in personEntries)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(children: [
-                  Expanded(
-                      child: Text(userMap[e.key] ?? e.key,
-                          style: const TextStyle(fontSize: 13))),
-                  Text(fmtMoney(e.value),
-                      style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: AppTheme.expense)),
-                ]),
-              ),
-            const SizedBox(height: 12),
             const Text('Top cash categories',
                 style:
                     TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
