@@ -8,7 +8,6 @@ import '../../data/models.dart';
 import '../../data/repos.dart';
 import '../petty_cash/petty_cash_screen.dart';
 import '../transactions/txn_form_screen.dart';
-import '../transactions/txn_list_screen.dart' show txnListProvider;
 
 /// Dashboard mirroring the Devniques Expense Tracker:
 /// Net Balance / Raised Capital / Operational Expenses / Cash Runway,
@@ -91,6 +90,8 @@ class DashboardScreen extends ConsumerWidget {
                 error: (_, __) => const SizedBox.shrink(),
               ),
               _KpiGrid(txns: list),
+              const SizedBox(height: 16),
+              _ProfitsSection(txns: list),
               const SizedBox(height: 16),
               _LedgerCard(txns: list, isAdmin: isAdmin),
               const SizedBox(height: 16),
@@ -916,6 +917,69 @@ class _InvestorPortfolio extends StatelessWidget {
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
                           color: AppTheme.investment)),
+                ]),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Profits section on the home page: total profit + monthly breakdown.
+class _ProfitsSection extends StatelessWidget {
+  final List<Txn> txns;
+  const _ProfitsSection({required this.txns});
+
+  @override
+  Widget build(BuildContext context) {
+    final profits = txns.where((t) => t.isProfit).toList();
+    final totalProfit = profits.fold(0.0, (a, t) => a + t.amount);
+    // Group by month
+    final byMonth = <String, double>{};
+    for (final t in profits) {
+      final k = '${t.date.year}-${t.date.month.toString().padLeft(2, '0')}';
+      byMonth[k] = (byMonth[k] ?? 0) + t.amount;
+    }
+    final entries = byMonth.entries.toList()
+      ..sort((a, b) => b.key.compareTo(a.key));
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Profits',
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        color: AppTheme.income)),
+                Text(fmtMoney(totalProfit),
+                    style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.income)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (entries.isEmpty)
+              const Text('No profits recorded yet.',
+                  style: TextStyle(fontSize: 13)),
+            for (final e in entries.take(6))
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(children: [
+                  Expanded(
+                      child: Text(e.key,
+                          style: const TextStyle(fontSize: 13))),
+                  Text(fmtMoney(e.value),
+                      style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.income)),
                 ]),
               ),
           ],

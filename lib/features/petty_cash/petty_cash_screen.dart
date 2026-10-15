@@ -1,5 +1,8 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../core/formatters.dart';
 import '../../core/theme.dart';
@@ -22,7 +25,16 @@ class PettyCashScreen extends ConsumerWidget {
         p != null && (p.isAdmin || p.role == 'add_only')).value ?? false;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Petty Cash')),
+      appBar: AppBar(
+        title: const Text('Petty Cash'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.download),
+            tooltip: 'Download CSV',
+            onPressed: () => _downloadCsv(ref),
+          ),
+        ],
+      ),
       floatingActionButton: canAdd
           ? FloatingActionButton(
               onPressed: () => _showAdd(context, ref),
@@ -279,6 +291,29 @@ class PettyCashScreen extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Future<void> _downloadCsv(WidgetRef ref) async {
+    final items = await ref.read(pettyCashListProvider.future);
+    final sorted = items.toList()
+      ..sort((a, b) => a.date.compareTo(b.date));
+    final sb = StringBuffer(
+        '\uFEFFDate,Description,Fund (Rs.),Spend (Rs.),Balance (Rs.)\n');
+    double balance = 0;
+    for (final p in sorted) {
+      final fund = p.isFund ? p.amount : 0;
+      final spend = !p.isFund ? p.amount : 0;
+      balance += (fund - spend);
+      sb.write(
+          '"${p.date.toIso8601String().substring(0, 10)}","${p.description.replaceAll('"', '""')}",$fund,$spend,$balance\n');
+    }
+    await Share.shareXFiles(
+      [XFile.fromData(
+          Uint8List.fromList(sb.toString().codeUnits),
+          name: 'devniques-petty-cash.csv',
+          mimeType: 'text/csv')],
+      text: 'Devniques Finance — Petty Cash',
     );
   }
 }

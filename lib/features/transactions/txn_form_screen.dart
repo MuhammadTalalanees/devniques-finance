@@ -146,6 +146,7 @@ class _TxnFormScreenState extends ConsumerState<TxnFormScreen> {
   Widget build(BuildContext context) {
     final cats = ref.watch(categoryListProvider);
     final parties = ref.watch(partyListProvider);
+    final txns = ref.watch(txnListProvider);
     return Scaffold(
       appBar: AppBar(
           title: Text(_isEdit ? 'Edit entry' : 'New entry')),
@@ -166,6 +167,10 @@ class _TxnFormScreenState extends ConsumerState<TxnFormScreen> {
                   value: 'investment',
                   label: Text('Investment'),
                   icon: Icon(Icons.savings)),
+              ButtonSegment(
+                  value: 'profit',
+                  label: Text('Profit'),
+                  icon: Icon(Icons.trending_up)),
             ],
             selected: {_type},
             onSelectionChanged: (s) =>
@@ -208,15 +213,24 @@ class _TxnFormScreenState extends ConsumerState<TxnFormScreen> {
               data: (list) {
                 final investors = list
                     .where((p) => p.kind == 'investor')
-                    .toList();
+                    .map((p) => p.name)
+                    .toSet();
+                // Add investors from transactions
+                txns.whenData((txns) {
+                  for (final t in txns.where((t) => t.isInvestment)) {
+                    if (t.investor.isNotEmpty) {
+                      investors.add(t.investor);
+                    }
+                  }
+                });
+                final sorted = investors.toList()..sort();
                 return DropdownButtonFormField<String>(
                   initialValue: _investorName,
                   decoration: const InputDecoration(
                       labelText: 'Investor'),
-                  items: investors
-                      .map((p) => DropdownMenuItem(
-                          value: p.name,
-                          child: Text(p.name)))
+                  items: sorted
+                      .map((name) => DropdownMenuItem(
+                          value: name, child: Text(name)))
                       .toList(),
                   onChanged: (v) =>
                       setState(() => _investorName = v),

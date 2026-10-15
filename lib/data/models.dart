@@ -129,7 +129,7 @@ class Party {
 
 class Txn {
   final String id;
-  final String type; // 'debit' | 'credit' | 'investment'
+  final String type; // 'debit' | 'credit' | 'investment' | 'profit'
   final double amount;
   final String? categoryId;
   final String categoryName; // denormalized for offline display
@@ -162,9 +162,11 @@ class Txn {
     required this.updatedAt,
   });
 
-  /// Money coming in (credit or investment) vs money going out (debit).
-  bool get isInflow => type == 'credit' || type == 'investment';
+  /// Money coming in (credit, investment, or profit) vs money going out (debit).
+  bool get isInflow =>
+      type == 'credit' || type == 'investment' || type == 'profit';
   bool get isInvestment => type == 'investment';
+  bool get isProfit => type == 'profit';
   bool get isDebit => type == 'debit';
 
   factory Txn.fromMap(Map<String, dynamic> m) => Txn(
