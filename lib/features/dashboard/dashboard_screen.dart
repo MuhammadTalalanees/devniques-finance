@@ -271,8 +271,12 @@ class _LedgerCard extends ConsumerWidget {
             else
               SizedBox(
                 height: 420,
-                child: Column(
-                  children: [
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SizedBox(
+                    width: isAdmin ? 790 : 690,
+                    child: Column(
+                      children: [
                     // Fixed header
                     Container(
                       color:
@@ -372,7 +376,9 @@ class _LedgerCard extends ConsumerWidget {
                       ),
                     ),
                   ],
-                ),
+                    ),
+                    ),
+                  ),
               ),
           ],
         ),
