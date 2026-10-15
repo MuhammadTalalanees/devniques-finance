@@ -263,35 +263,31 @@ class _TxnTile extends ConsumerWidget {
                     false;
                 if (confirm) {
                   // Cascade delete: if this is a petty cash fund entry,
-                  // also delete the linked petty cash record
+                  // also delete the linked petty cash record(s)
                   if (txn.isPettyCashFund) {
                     final pettyEntries = await ref.read(
                         pettyCashListProvider.future);
-                    for (final pe in pettyEntries
-                        .where((p) => p.txnId == txn.id)) {
-                      await ref
-                          .read(pettyCashRepoProvider)
-                          .remove(pe.id);
-                    }
-                    // Fallback: match by amount/date for old entries
-                    // without txnId link
                     final txnDate = txn.date
                         .toIso8601String()
                         .substring(0, 10);
-                    for (final pe in pettyEntries.where((p) =>
+                    // Match by txnId OR by amount+date (for unlinked old entries)
+                    final toDelete = pettyEntries.where((p) =>
                         p.isFund &&
-                        p.txnId == null &&
-                        p.amount == txn.amount &&
-                        p.date
-                                .toIso8601String()
-                                .substring(0, 10) ==
-                            txnDate)) {
+                        (p.txnId == txn.id ||
+                            (p.amount == txn.amount &&
+                                p.date
+                                        .toIso8601String()
+                                        .substring(0, 10) ==
+                                    txnDate)));
+                    for (final pe in toDelete) {
                       await ref
                           .read(pettyCashRepoProvider)
                           .remove(pe.id);
                     }
                   }
                   await ref.read(txnRepoProvider).remove(txn.id);
+                  // Force refresh petty cash list
+                  ref.invalidate(pettyCashListProvider);
                 }
               },
             ),
