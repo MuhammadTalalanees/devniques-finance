@@ -15,7 +15,8 @@ const paymentMethods = ['Cash', 'Bank', 'Card', 'Online', 'Other'];
 /// (staff = add only; edit/delete is gated before navigation).
 class TxnFormScreen extends ConsumerStatefulWidget {
   final Txn? existing;
-  const TxnFormScreen({super.key, this.existing});
+  final String? initialType; // debit | credit | investment | profit
+  const TxnFormScreen({super.key, this.existing, this.initialType});
 
   @override
   ConsumerState<TxnFormScreen> createState() => _TxnFormScreenState();
@@ -35,6 +36,8 @@ class _TxnFormScreenState extends ConsumerState<TxnFormScreen> {
   XFile? _receiptXFile;
   Uint8List? _receiptBytes;
   bool _busy = false;
+  bool _pettyCashFund = false; // credit form: also add to petty cash as fund
+  bool _pettyCashSpend = false; // debit form: spend from petty cash
 
   bool get _isEdit => widget.existing != null;
 
@@ -42,7 +45,15 @@ class _TxnFormScreenState extends ConsumerState<TxnFormScreen> {
   void initState() {
     super.initState();
     final e = widget.existing;
-    _type = (e?.type == 'credit' || e?.type == 'investment') ? e!.type : 'debit';
+    if (e != null) {
+      _type = (e.type == 'credit' ||
+              e.type == 'investment' ||
+              e.type == 'profit')
+          ? e.type
+          : 'debit';
+    } else {
+      _type = widget.initialType ?? 'debit';
+    }
     if (e != null) {
       _amount.text = e.amount.toStringAsFixed(2);
       _desc.text = e.description;
@@ -108,6 +119,68 @@ class _TxnFormScreenState extends ConsumerState<TxnFormScreen> {
       final cat = cats.where((c) => c.id == _categoryId);
       final party = parties.where((p) => p.id == _partyId);
       final now = DateTime.now();
+      final repo = ref.read(txnRepoProvider);
+      final pettyRepo = ref.read(pettyCashRepoProvider);
+
+      // Case 1: Credit marked as petty cash fund
+      // → Save as debit (balance ↓, expense ↑) + create petty cash fund entry
+      if (_type == 'credit' && _pettyCashFund && !_isEdit) {
+        final txn = Txn(
+          id: newId(),
+          type: 'debit',
+          amount: amount,
+          categoryId: _categoryId,
+          categoryName:
+              _type == 'debit' && cat.isNotEmpty ? cat.first.name : 'Petty cash fund',
+          partyId: _partyId,
+          partyName: party.isEmpty ? '' : party.first.name,
+          investor: '',
+          date: _date,
+          description: _desc.text.trim().isEmpty
+              ? 'Petty cash fund'
+              : _desc.text.trim(),
+          paymentMethod: _method,
+          receiptUrl: receiptUrl,
+          receiptLocal: receiptLocal,
+          createdBy: profile.id,
+          updatedAt: now,
+        );
+        await repo.add(txn);
+        final pettyEntry = PettyCash(
+          id: newId(),
+          amount: amount,
+          description: _desc.text.trim().isEmpty
+              ? 'Fund added'
+              : _desc.text.trim(),
+          date: _date,
+          createdBy: profile.id,
+          updatedAt: now,
+          kind: 'fund',
+        );
+        await pettyRepo.add(pettyEntry);
+        if (mounted) Navigator.of(context).pop();
+        return;
+      }
+
+      // Case 2: Debit marked as petty cash spend
+      // → Only create petty cash spend entry (no main ledger entry)
+      if (_type == 'debit' && _pettyCashSpend && !_isEdit) {
+        final pettyEntry = PettyCash(
+          id: newId(),
+          amount: amount,
+          description: _desc.text.trim().isEmpty
+              ? 'Petty cash expense'
+              : _desc.text.trim(),
+          date: _date,
+          createdBy: profile.id,
+          updatedAt: now,
+          kind: 'spend',
+        );
+        await pettyRepo.add(pettyEntry);
+        if (mounted) Navigator.of(context).pop();
+        return;
+      }
+
       final txn = Txn(
         id: widget.existing?.id ?? newId(),
         type: _type,
@@ -125,7 +198,6 @@ class _TxnFormScreenState extends ConsumerState<TxnFormScreen> {
         createdBy: widget.existing?.createdBy ?? profile.id,
         updatedAt: now,
       );
-      final repo = ref.read(txnRepoProvider);
       if (_isEdit) {
         await repo.update(txn);
       } else {
@@ -173,10 +245,34 @@ class _TxnFormScreenState extends ConsumerState<TxnFormScreen> {
                   icon: Icon(Icons.trending_up)),
             ],
             selected: {_type},
-            onSelectionChanged: (s) =>
-                setState(() => _type = s.first),
+            onSelectionChanged: (s) => setState(() {
+              _type = s.first;
+              // Reset petty cash flags when switching types
+              _pettyCashFund = false;
+              _pettyCashSpend = false;
+            }),
           ),
           const SizedBox(height: 16),
+          if (_type == 'credit')
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Petty cash fund'),
+              subtitle: const Text(
+                  'Add this amount to petty cash (balance decreases, expense increases)'),
+              value: _pettyCashFund,
+              onChanged: (v) =>
+                  setState(() => _pettyCashFund = v ?? false),
+            ),
+          if (_type == 'debit')
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Pay from petty cash'),
+              subtitle: const Text(
+                  'Deduct from petty cash balance (main balance unchanged)'),
+              value: _pettyCashSpend,
+              onChanged: (v) =>
+                  setState(() => _pettyCashSpend = v ?? false),
+            ),
           TextField(
             controller: _amount,
             keyboardType:

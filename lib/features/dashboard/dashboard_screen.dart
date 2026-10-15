@@ -1088,8 +1088,8 @@ class _PettyCashSummary extends ConsumerWidget {
                       onPressed: () =>
                           Navigator.of(context).push(
                         MaterialPageRoute(
-                            builder: (_) =>
-                                const PettyCashScreen()),
+                            builder: (_) => const TxnFormScreen(
+                                initialType: 'credit')),
                       ),
                       icon: const Icon(Icons.add, size: 18),
                       label: const Text('Add petty cash'),

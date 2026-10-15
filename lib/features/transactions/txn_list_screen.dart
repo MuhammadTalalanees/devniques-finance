@@ -15,8 +15,18 @@ class TxnListScreen extends ConsumerStatefulWidget {
 }
 
 class _TxnListScreenState extends ConsumerState<TxnListScreen> {
-  String _filter = 'all'; // all | debit | credit | investment
+  String _filter = 'all'; // all | debit | credit | investment | profit
   String _query = '';
+
+  String get _fabType {
+    if (_filter == 'debit' ||
+        _filter == 'credit' ||
+        _filter == 'investment' ||
+        _filter == 'profit') {
+      return _filter;
+    }
+    return 'debit';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -45,6 +55,7 @@ class _TxnListScreenState extends ConsumerState<TxnListScreen> {
                 ButtonSegment(value: 'debit', label: Text('Expenses')),
                 ButtonSegment(value: 'credit', label: Text('Credits')),
                 ButtonSegment(value: 'investment', label: Text('Investments')),
+                ButtonSegment(value: 'profit', label: Text('Profits')),
               ],
               selected: {_filter},
               onSelectionChanged: (s) =>
@@ -92,6 +103,20 @@ class _TxnListScreenState extends ConsumerState<TxnListScreen> {
             ),
           ),
         ],
+      ),
+      floatingActionButton: profile.when(
+        data: (p) => p != null && p.role != 'view_only'
+            ? FloatingActionButton(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                      builder: (_) =>
+                          TxnFormScreen(initialType: _fabType)),
+                ),
+                child: const Icon(Icons.add),
+              )
+            : null,
+        loading: () => null,
+        error: (_, __) => null,
       ),
     );
   }

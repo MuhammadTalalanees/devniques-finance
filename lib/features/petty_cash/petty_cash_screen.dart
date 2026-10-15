@@ -21,8 +21,6 @@ class PettyCashScreen extends ConsumerWidget {
     final profile = ref.watch(profileProvider);
     final isAdmin =
         profile.whenData((p) => p?.isAdmin ?? false).value ?? false;
-    final canAdd = profile.whenData((p) =>
-        p != null && (p.isAdmin || p.role == 'add_only')).value ?? false;
 
     return Scaffold(
       appBar: AppBar(
@@ -35,12 +33,6 @@ class PettyCashScreen extends ConsumerWidget {
           ),
         ],
       ),
-      floatingActionButton: canAdd
-          ? FloatingActionButton(
-              onPressed: () => _showAdd(context, ref),
-              child: const Icon(Icons.add),
-            )
-          : null,
       body: list.when(
         loading: () =>
             const Center(child: CircularProgressIndicator()),
@@ -209,117 +201,6 @@ class PettyCashScreen extends ConsumerWidget {
     );
   }
 
-  void _showAdd(BuildContext context, WidgetRef ref) {
-    final amountCtrl = TextEditingController();
-    final descCtrl = TextEditingController();
-    final profile = ref.read(profileProvider).value;
-    var isFund = false; // false = spend, true = add funds
-    var selectedDate = DateTime.now();
-    showDialog(
-      context: context,
-      builder: (_) => StatefulBuilder(
-        builder: (ctx, setState) => AlertDialog(
-          title: const Text('Petty Cash'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SegmentedButton<bool>(
-                segments: const [
-                  ButtonSegment(
-                      value: true,
-                      label: Text('Add funds'),
-                      icon: Icon(Icons.add_card,
-                          size: 18)),
-                  ButtonSegment(
-                      value: false,
-                      label: Text('Spend'),
-                      icon: Icon(
-                          Icons.coffee_outlined,
-                          size: 18)),
-                ],
-                selected: {isFund},
-                onSelectionChanged: (s) =>
-                    setState(() => isFund = s.first),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: amountCtrl,
-                decoration: const InputDecoration(
-                    labelText: 'Amount (Rs)',
-                    prefixText: 'Rs '),
-                keyboardType:
-                    const TextInputType.numberWithOptions(
-                        decimal: true),
-                autofocus: true,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: descCtrl,
-                decoration: InputDecoration(
-                    labelText: isFund
-                        ? 'Note (e.g. monthly float)'
-                        : 'Description (e.g. lunch)'),
-              ),
-              const SizedBox(height: 12),
-              InkWell(
-                onTap: () async {
-                  final picked = await showDatePicker(
-                    context: ctx,
-                    initialDate: selectedDate,
-                    firstDate: DateTime(2020),
-                    lastDate: DateTime.now(),
-                  );
-                  if (picked != null) {
-                    setState(() => selectedDate = picked);
-                  }
-                },
-                child: InputDecorator(
-                  decoration: const InputDecoration(
-                    labelText: 'Date',
-                    prefixIcon: Icon(Icons.calendar_today),
-                  ),
-                  child: Text(
-                    '${selectedDate.day.toString().padLeft(2, '0')} '
-                    '${_monthName(selectedDate.month)} '
-                    '${selectedDate.year}',
-                  ),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel')),
-            FilledButton(
-              onPressed: () async {
-                final amount =
-                    double.tryParse(amountCtrl.text) ?? 0;
-                if (amount <= 0) return;
-                final now = DateTime.now();
-                final entry = PettyCash(
-                  id: newId(),
-                  amount: amount,
-                  description: descCtrl.text.trim(),
-                  date: selectedDate,
-                  createdBy: profile?.id ?? '',
-                  updatedAt: now,
-                  kind: isFund ? 'fund' : 'spend',
-                );
-                await ref
-                    .read(pettyCashRepoProvider)
-                    .add(entry);
-                if (context.mounted)
-                  Navigator.pop(context);
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Future<void> _downloadCsv(WidgetRef ref) async {
     final items = await ref.read(pettyCashListProvider.future);
     final sorted = items.toList()
@@ -342,12 +223,4 @@ class PettyCashScreen extends ConsumerWidget {
       text: 'Devniques Finance — Petty Cash',
     );
   }
-}
-
-String _monthName(int month) {
-  const names = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-  ];
-  return names[month - 1];
 }
