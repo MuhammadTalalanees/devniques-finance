@@ -127,6 +127,15 @@ class _TxnFormScreenState extends ConsumerState<TxnFormScreen> {
           profitCategoryId = profitCat.first.id;
         }
       }
+      // For petty cash fund entries, auto-assign the "General" category
+      String? generalCategoryId;
+      if (_type == 'credit' && _pettyCashFund) {
+        final generalCat = cats.where(
+            (c) => c.name.toLowerCase() == 'general');
+        if (generalCat.isNotEmpty) {
+          generalCategoryId = generalCat.first.id;
+        }
+      }
       final now = DateTime.now();
       final repo = ref.read(txnRepoProvider);
       final pettyRepo = ref.read(pettyCashRepoProvider);
@@ -138,9 +147,12 @@ class _TxnFormScreenState extends ConsumerState<TxnFormScreen> {
           id: newId(),
           type: 'debit',
           amount: amount,
-          categoryId: _categoryId,
-          categoryName:
-              cat.isNotEmpty ? cat.first.name : 'Petty cash fund',
+          categoryId: generalCategoryId ?? _categoryId,
+          categoryName: generalCategoryId != null
+              ? 'General'
+              : (cat.isNotEmpty
+                  ? cat.first.name
+                  : 'Petty cash fund'),
           partyId: _partyId,
           partyName: party.isEmpty ? '' : party.first.name,
           investor: '',
@@ -308,37 +320,6 @@ class _TxnFormScreenState extends ConsumerState<TxnFormScreen> {
                       .map((c) => DropdownMenuItem(
                           value: c.id, child: Text(c.name)))
                       .toList(),
-                  onChanged: (v) =>
-                      setState(() => _categoryId = v),
-                );
-              },
-              loading: () =>
-                  const LinearProgressIndicator(),
-              error: (_, __) =>
-                  const Text('Could not load categories'),
-            ),
-          if (_type == 'credit')
-            cats.when(
-              data: (list) {
-                final items = list
-                    .where((c) =>
-                        c.matches('income') || c.matches('credit'))
-                    .toList();
-                // If no income categories, show all
-                final showItems =
-                    items.isEmpty ? list : items;
-                return DropdownButtonFormField<String>(
-                  initialValue: _categoryId,
-                  decoration: const InputDecoration(
-                      labelText: 'Credit category (optional)'),
-                  items: [
-                    const DropdownMenuItem(
-                      value: null,
-                      child: Text('— None —'),
-                    ),
-                    ...showItems.map((c) => DropdownMenuItem(
-                        value: c.id, child: Text(c.name))),
-                  ],
                   onChanged: (v) =>
                       setState(() => _categoryId = v),
                 );

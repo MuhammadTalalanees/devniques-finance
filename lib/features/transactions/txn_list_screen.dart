@@ -32,6 +32,10 @@ class _TxnListScreenState extends ConsumerState<TxnListScreen> {
   Widget build(BuildContext context) {
     final txns = ref.watch(txnListProvider);
     final profile = ref.watch(profileProvider);
+    final canAdd = profile.whenData(
+            (p) => p != null && p.role != 'view_only')
+        .value ??
+        false;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Entries')),
@@ -104,29 +108,28 @@ class _TxnListScreenState extends ConsumerState<TxnListScreen> {
           ),
         ],
       ),
-      floatingActionButton: profile.when(
-        data: (p) {
-          if (p == null || p.role == 'view_only') return null;
-          final currentFilter = _filter;
-          String formType = 'debit';
-          if (currentFilter == 'credit' ||
-              currentFilter == 'investment' ||
-              currentFilter == 'profit' ||
-              currentFilter == 'debit') {
-            formType = currentFilter;
-          }
-          return FloatingActionButton(
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                  builder: (_) =>
-                      TxnFormScreen(initialType: formType)),
-            ),
-            child: const Icon(Icons.add),
-          );
-        },
-        loading: () => null,
-        error: (_, __) => null,
-      ),
+      floatingActionButton: canAdd
+          ? Builder(
+              builder: (ctx) {
+                final currentFilter = _filter;
+                String formType = 'debit';
+                if (currentFilter == 'credit' ||
+                    currentFilter == 'investment' ||
+                    currentFilter == 'profit' ||
+                    currentFilter == 'debit') {
+                  formType = currentFilter;
+                }
+                return FloatingActionButton(
+                  onPressed: () => Navigator.of(ctx).push(
+                    MaterialPageRoute(
+                        builder: (_) =>
+                            TxnFormScreen(initialType: formType)),
+                  ),
+                  child: const Icon(Icons.add),
+                );
+              },
+            )
+          : null,
     );
   }
 }
