@@ -332,6 +332,14 @@ class PettyCashRepo {
 
   Future<void> add(PettyCash p) async {
     final db = LocalDb.instance;
+    // Ensure txn_id column exists (for DBs created before v5 migration)
+    try {
+      final d = await db.db;
+      await d.execute(
+          "ALTER TABLE petty_cash ADD COLUMN txn_id TEXT");
+    } catch (_) {
+      // Column already exists, ignore
+    }
     await db.upsertAll('petty_cash', [p.toMap()]);
     await db.enqueue('petty_cash', 'insert', p.id, p.toRemoteMap());
     _ref.invalidate(pettyCashListProvider);

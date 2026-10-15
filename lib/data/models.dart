@@ -269,16 +269,20 @@ class PettyCash {
         txnId: m['txn_id'] as String?,
       );
 
-  Map<String, dynamic> toMap() => {
-        'id': id,
-        'amount': amount,
-        'description': description,
-        'date': date.toIso8601String().substring(0, 10),
-        'created_by': createdBy,
-        'updated_at': _iso(updatedAt),
-        'kind': kind,
-        'txn_id': txnId,
-      };
+  Map<String, dynamic> toMap() {
+    final m = <String, dynamic>{
+      'id': id,
+      'amount': amount,
+      'description': description,
+      'date': date.toIso8601String().substring(0, 10),
+      'created_by': createdBy,
+      'updated_at': _iso(updatedAt),
+      'kind': kind,
+    };
+    // Only include txn_id if set (for backward compat with old local DBs)
+    if (txnId != null) m['txn_id'] = txnId;
+    return m;
+  }
 
   Map<String, dynamic> toRemoteMap() => {
         'id': id,
