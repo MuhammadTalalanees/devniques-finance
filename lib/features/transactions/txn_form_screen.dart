@@ -37,6 +37,7 @@ class _TxnFormScreenState extends ConsumerState<TxnFormScreen> {
   Uint8List? _receiptBytes;
   bool _busy = false;
   bool _pettyCashFund = false; // credit form: also add to petty cash as fund
+  bool _pettyCashSpend = false; // debit form: spend from petty cash
 
   bool get _isEdit => widget.existing != null;
 
@@ -170,11 +171,9 @@ class _TxnFormScreenState extends ConsumerState<TxnFormScreen> {
         return;
       }
 
-      // Case 2: Debit with "Petty Cash" category selected
+      // Case 2: Debit with "Pay from petty cash" checked
       // → Only create petty cash spend entry (no main ledger entry)
-      if (_type == 'debit' &&
-          _categoryId == '__petty_cash__' &&
-          !_isEdit) {
+      if (_type == 'debit' && _pettyCashSpend && !_isEdit) {
         final pettyEntry = PettyCash(
           id: newId(),
           amount: amount,
@@ -261,8 +260,9 @@ class _TxnFormScreenState extends ConsumerState<TxnFormScreen> {
             selected: {_type},
             onSelectionChanged: (s) => setState(() {
               _type = s.first;
-              // Reset petty cash flag when switching types
+              // Reset petty cash flags when switching types
               _pettyCashFund = false;
+              _pettyCashSpend = false;
             }),
           ),
           const SizedBox(height: 16),
@@ -275,6 +275,16 @@ class _TxnFormScreenState extends ConsumerState<TxnFormScreen> {
               value: _pettyCashFund,
               onChanged: (v) =>
                   setState(() => _pettyCashFund = v ?? false),
+            ),
+          if (_type == 'debit')
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Pay from petty cash'),
+              subtitle: const Text(
+                  'Deduct from petty cash balance (main balance unchanged)'),
+              value: _pettyCashSpend,
+              onChanged: (v) =>
+                  setState(() => _pettyCashSpend = v ?? false),
             ),
           TextField(
             controller: _amount,
@@ -294,14 +304,10 @@ class _TxnFormScreenState extends ConsumerState<TxnFormScreen> {
                   initialValue: _categoryId,
                   decoration: const InputDecoration(
                       labelText: 'Expense category'),
-                  items: [
-                    ...items.map((c) => DropdownMenuItem(
-                        value: c.id, child: Text(c.name))),
-                    const DropdownMenuItem(
-                      value: '__petty_cash__',
-                      child: Text('Petty Cash'),
-                    ),
-                  ],
+                  items: items
+                      .map((c) => DropdownMenuItem(
+                          value: c.id, child: Text(c.name)))
+                      .toList(),
                   onChanged: (v) =>
                       setState(() => _categoryId = v),
                 );
