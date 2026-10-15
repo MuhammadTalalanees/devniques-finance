@@ -41,6 +41,13 @@ class _TxnFormScreenState extends ConsumerState<TxnFormScreen> {
 
   bool get _isEdit => widget.existing != null;
 
+  /// True if editing a "Petty cash fund" ledger entry (saved as debit).
+  bool get _isPettyFundEdit =>
+      _isEdit &&
+      (widget.existing?.description
+              .startsWith('Petty cash fund - ') ??
+          false);
+
   @override
   void initState() {
     super.initState();
@@ -51,6 +58,11 @@ class _TxnFormScreenState extends ConsumerState<TxnFormScreen> {
               e.type == 'profit')
           ? e.type
           : 'debit';
+      // If editing a petty cash fund entry, show it as credit + checked
+      if (e.description.startsWith('Petty cash fund - ')) {
+        _type = 'credit';
+        _pettyCashFund = true;
+      }
     } else {
       _type = widget.initialType ?? 'debit';
     }
@@ -180,6 +192,56 @@ class _TxnFormScreenState extends ConsumerState<TxnFormScreen> {
           txnId: txn.id,
         );
         await pettyRepo.add(pettyEntry);
+        if (mounted) Navigator.of(context).pop();
+        return;
+      }
+
+      // Case 1b: Editing a petty cash fund entry
+      // → Update both the ledger txn and the linked petty cash fund entry
+      if (_type == 'credit' && _pettyCashFund && _isPettyFundEdit) {
+        final existing = widget.existing!;
+        final txn = Txn(
+          id: existing.id,
+          type: 'debit',
+          amount: amount,
+          categoryId: existing.categoryId,
+          categoryName: existing.categoryName,
+          partyId: _partyId,
+          partyName: party.isEmpty ? '' : party.first.name,
+          investor: '',
+          date: _date,
+          description: _desc.text.trim().isEmpty
+              ? 'Petty cash fund'
+              : (_desc.text.trim().startsWith('Petty cash fund - ')
+                  ? _desc.text.trim()
+                  : 'Petty cash fund - ${_desc.text.trim()}'),
+          paymentMethod: _method,
+          receiptUrl: receiptUrl,
+          receiptLocal: receiptLocal,
+          createdBy: existing.createdBy,
+          updatedAt: now,
+        );
+        await repo.update(txn);
+        // Update the linked petty cash fund entry
+        final pettyEntries =
+            await ref.read(pettyCashListProvider.future);
+        final linked = pettyEntries.where((p) => p.txnId == existing.id);
+        for (final pe in linked) {
+          final updated = PettyCash(
+            id: pe.id,
+            amount: amount,
+            description: _desc.text.trim().isEmpty
+                ? 'Fund added'
+                : _desc.text.trim().replaceFirst(
+                    'Petty cash fund - ', ''),
+            date: _date,
+            createdBy: pe.createdBy,
+            updatedAt: now,
+            kind: 'fund',
+            txnId: existing.id,
+          );
+          await pettyRepo.update(updated);
+        }
         if (mounted) Navigator.of(context).pop();
         return;
       }

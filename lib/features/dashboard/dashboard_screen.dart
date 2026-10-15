@@ -983,6 +983,8 @@ class _PettyCashSummary extends ConsumerWidget {
     final profile = ref.watch(profileProvider);
     final canAdd =
         profile.whenData((p) => p?.canAdd ?? false).value ?? false;
+    final isAdmin =
+        profile.whenData((p) => p?.isAdmin ?? false).value ?? false;
 
     return list.when(
       loading: () => const SizedBox.shrink(),
@@ -1072,6 +1074,36 @@ class _PettyCashSummary extends ConsumerWidget {
                                           color: p.isFund
                                               ? AppTheme.income
                                               : AppTheme.expense)),
+                                  if (isAdmin) ...[
+                                    InkWell(
+                                      onTap: () =>
+                                          _editPettyEntry(
+                                              context, ref, p),
+                                      child: const Padding(
+                                        padding:
+                                            EdgeInsets.symmetric(
+                                                horizontal: 4),
+                                        child: Icon(Icons.edit,
+                                            size: 16,
+                                            color:
+                                                AppTheme.primary),
+                                      ),
+                                    ),
+                                    InkWell(
+                                      onTap: () =>
+                                          _deletePettyEntry(
+                                              context, ref, p),
+                                      child: const Padding(
+                                        padding:
+                                            EdgeInsets.symmetric(
+                                                horizontal: 4),
+                                        child: Icon(Icons.delete,
+                                            size: 16,
+                                            color:
+                                                Colors.redAccent),
+                                      ),
+                                    ),
+                                  ],
                                 ],
                               ),
                             ),
@@ -1102,5 +1134,53 @@ class _PettyCashSummary extends ConsumerWidget {
         );
       },
     );
+  }
+
+  Future<void> _editPettyEntry(
+      BuildContext context, WidgetRef ref, PettyCash p) async {
+    // Fund entry with linked txn → edit via ledger form
+    if (p.isFund && p.txnId != null) {
+      final txns = await ref.read(txnListProvider.future);
+      final linked = txns.where((t) => t.id == p.txnId);
+      if (linked.isNotEmpty) {
+        Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => TxnFormScreen(existing: linked.first),
+        ));
+        return;
+      }
+    }
+    // Otherwise navigate to full petty cash screen for editing
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const PettyCashScreen()),
+    );
+  }
+
+  Future<void> _deletePettyEntry(
+      BuildContext context, WidgetRef ref, PettyCash p) async {
+    final confirm = await showDialog<bool>(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: const Text('Delete?'),
+            content:
+                const Text('Remove this petty cash entry?'),
+            actions: [
+              TextButton(
+                  onPressed: () =>
+                      Navigator.pop(context, false),
+                  child: const Text('Cancel')),
+              FilledButton(
+                  onPressed: () =>
+                      Navigator.pop(context, true),
+                  child: const Text('Delete')),
+            ],
+          ),
+        ) ??
+        false;
+    if (confirm) {
+      if (p.txnId != null) {
+        await ref.read(txnRepoProvider).remove(p.txnId!);
+      }
+      await ref.read(pettyCashRepoProvider).remove(p.id);
+    }
   }
 }

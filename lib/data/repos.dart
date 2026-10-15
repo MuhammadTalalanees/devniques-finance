@@ -346,6 +346,14 @@ class PettyCashRepo {
     _ref.read(syncProvider.notifier).syncNow();
   }
 
+  Future<void> update(PettyCash p) async {
+    final db = LocalDb.instance;
+    await db.upsertAll('petty_cash', [p.toMap()]);
+    await db.enqueue('petty_cash', 'update', p.id, p.toRemoteMap());
+    _ref.invalidate(pettyCashListProvider);
+    _ref.read(syncProvider.notifier).syncNow();
+  }
+
   Future<void> remove(String id) async {
     final db = LocalDb.instance;
     await db.deleteRow('petty_cash', id);

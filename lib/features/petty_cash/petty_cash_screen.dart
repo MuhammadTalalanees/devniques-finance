@@ -8,6 +8,7 @@ import '../../core/formatters.dart';
 import '../../core/theme.dart';
 import '../../data/models.dart';
 import '../../data/repos.dart';
+import '../transactions/txn_form_screen.dart';
 
 /// Petty Cash: its own separate pot of money.
 /// 'Fund' = money added INTO petty cash. 'Spend' = money spent FROM it.
@@ -142,7 +143,22 @@ class PettyCashScreen extends ConsumerWidget {
                                               ? AppTheme.income
                                               : AppTheme.expense)),
                                   if (isAdmin)
-                                    IconButton(
+                                    Row(
+                                        mainAxisSize:
+                                            MainAxisSize.min,
+                                        children: [
+                                          IconButton(
+                                            icon: const Icon(
+                                                Icons.edit,
+                                                size: 20),
+                                            color:
+                                                AppTheme.primary,
+                                            tooltip: 'Edit',
+                                            onPressed: () =>
+                                                _editEntry(context,
+                                                    ref, p),
+                                          ),
+                                          IconButton(
                                       icon: const Icon(
                                           Icons.delete,
                                           size: 20),
@@ -195,6 +211,8 @@ class PettyCashScreen extends ConsumerWidget {
                                         }
                                       },
                                     ),
+                                        ],
+                                      ),
                                 ],
                               ),
                             ),
@@ -230,5 +248,100 @@ class PettyCashScreen extends ConsumerWidget {
           mimeType: 'text/csv')],
       text: 'Devniques Finance — Petty Cash',
     );
+  }
+
+  Future<void> _editEntry(
+      BuildContext context, WidgetRef ref, PettyCash p) async {
+    if (p.isFund && p.txnId != null) {
+      final txns = await ref.read(txnListProvider.future);
+      final linked = txns.where((t) => t.id == p.txnId);
+      if (linked.isNotEmpty) {
+        Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => TxnFormScreen(existing: linked.first),
+        ));
+        return;
+      }
+    }
+    final amountCtrl =
+        TextEditingController(text: p.amount.toStringAsFixed(0));
+    final descCtrl = TextEditingController(text: p.description);
+    DateTime date = p.date;
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: Text(p.isFund ? 'Edit fund entry' : 'Edit petty expense'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: amountCtrl,
+                keyboardType: TextInputType.number,
+                decoration:
+                    const InputDecoration(labelText: 'Amount (Rs)'),
+              ),
+              TextField(
+                controller: descCtrl,
+                decoration:
+                    const InputDecoration(labelText: 'Description'),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Icon(Icons.calendar_today, size: 18),
+                  const SizedBox(width: 8),
+                  TextButton(
+                    onPressed: () async {
+                      final picked = await showDatePicker(
+                        context: ctx,
+                        initialDate: date,
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime(2030),
+                      );
+                      if (picked != null) {
+                        setState(() => date = picked);
+                      }
+                    },
+                    child: Text(
+                        '${date.day}/${date.month}/${date.year}'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (saved == true) {
+      final amount = double.tryParse(amountCtrl.text.trim());
+      if (amount == null || amount <= 0) {
+        amountCtrl.dispose();
+        descCtrl.dispose();
+        return;
+      }
+      final updated = PettyCash(
+        id: p.id,
+        amount: amount,
+        description: descCtrl.text.trim(),
+        date: date,
+        createdBy: p.createdBy,
+        updatedAt: DateTime.now(),
+        kind: p.kind,
+        txnId: p.txnId,
+      );
+      await ref.read(pettyCashRepoProvider).update(updated);
+    }
+    amountCtrl.dispose();
+    descCtrl.dispose();
   }
 }
