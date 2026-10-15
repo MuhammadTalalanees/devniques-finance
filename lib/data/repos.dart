@@ -190,7 +190,13 @@ class SyncNotifier extends Notifier<SyncState> {
     await LocalDb.instance.dropOps(done);
   }
 
-  static const _tables = ['categories', 'parties', 'transactions', 'profiles'];
+  static const _tables = [
+    'categories',
+    'parties',
+    'transactions',
+    'profiles',
+    'petty_cash'
+  ];
 
   /// Local column allow-list per table (remote rows carry extra columns
   /// like created_at / created_by which don't exist locally).
@@ -203,6 +209,10 @@ class SyncNotifier extends Notifier<SyncState> {
       'description', 'payment_method', 'receipt_url', 'created_by',
       'updated_at'
     },
+    'petty_cash': {
+      'id', 'amount', 'description', 'date', 'created_by', 'updated_at',
+      'kind'
+    },
   };
 
   Map<String, dynamic> _localize(String table, Map<String, dynamic> row) {
@@ -214,8 +224,8 @@ class SyncNotifier extends Notifier<SyncState> {
     final supa = ref.read(supaServiceProvider);
     final db = LocalDb.instance;
     // Wave 1: reference tables concurrently (was: 4 sequential round-trips).
-    await Future.wait(
-        ['categories', 'parties', 'profiles'].map((t) => _pullTable(supa, db, t)));
+    await Future.wait(['categories', 'parties', 'profiles', 'petty_cash']
+        .map((t) => _pullTable(supa, db, t)));
     // Wave 2: transactions need categories/parties for name denormalization.
     await _pullTable(supa, db, 'transactions');
     // Reconcile deletes at most once per hour — deletes are rare, and
