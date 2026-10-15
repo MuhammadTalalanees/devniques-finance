@@ -271,144 +271,107 @@ class _LedgerCard extends ConsumerWidget {
             else
               SizedBox(
                 height: 420,
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.vertical,
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: DataTable(
-                  headingRowColor: WidgetStateProperty.all(
-                      AppTheme.primary.withValues(alpha: 0.08)),
-                  columnSpacing: 16,
-                  dataRowMinHeight: 40,
-                  dataRowMaxHeight: 56,
-                  columns: [
-                    const DataColumn(
-                        label: Text('Date',
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold))),
-                    const DataColumn(
-                        label: Text('Particulars',
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold))),
-                    const DataColumn(
-                        label: Text('Category / Scope',
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold))),
-                    const DataColumn(
-                        numeric: true,
-                        label: Text('Debit (Rs.)',
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold))),
-                    const DataColumn(
-                        numeric: true,
-                        label: Text('Credit (Rs.)',
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold))),
-                    const DataColumn(
-                        numeric: true,
-                        label: Text('Balance (Rs.)',
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold))),
-                    const DataColumn(
-                        label: Text('Doc',
-                            style: TextStyle(
-                                fontWeight: FontWeight.bold))),
-                    if (isAdmin)
-                      const DataColumn(
-                          label: Text('Action',
-                              style: TextStyle(
-                                  fontWeight: FontWeight.bold))),
-                  ],
-                  rows: [
-                    for (final r in display)
-                      DataRow(cells: [
-                        DataCell(Text(fmtDate(r.txn.date),
-                            style:
-                                const TextStyle(fontSize: 12))),
-                        DataCell(SizedBox(
-                          width: 170,
-                          child: Text(
-                            r.txn.description.isEmpty
-                                ? '—'
-                                : r.txn.description,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style:
-                                const TextStyle(fontSize: 12),
-                          ),
-                        )),
-                        DataCell(_ScopeBadge(txn: r.txn)),
-                        DataCell(Text(
-                            r.txn.isDebit
-                                ? fmtMoney(r.txn.amount)
-                                : '-',
-                            style:
-                                const TextStyle(fontSize: 12))),
-                        DataCell(Text(
-                            r.txn.isInflow
-                                ? fmtMoney(r.txn.amount)
-                                : '-',
-                            style:
-                                const TextStyle(fontSize: 12))),
-                        DataCell(Text(fmtMoney(r.balance),
-                            style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold))),
-                        DataCell((r.txn.receiptUrl ?? '').isEmpty
-                            ? const Text('-',
-                                style: TextStyle(fontSize: 12))
-                            : const Icon(Icons.attach_file,
-                                size: 16,
-                                color: AppTheme.primary)),
-                        if (isAdmin)
-                          DataCell(Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              TextButton(
-                                style: TextButton.styleFrom(
-                                  foregroundColor:
-                                      const Color(0xFFB45309),
-                                  padding: EdgeInsets.zero,
-                                  minimumSize:
-                                      const Size(40, 32),
-                                ),
-                                onPressed: () =>
-                                    Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                      builder: (_) =>
-                                          TxnFormScreen(
-                                              existing:
-                                                  r.txn)),
-                                ),
-                                child: const Text('Edit',
-                                    style: TextStyle(
-                                        fontSize: 12)),
-                              ),
-                              const Text('|',
+                child: Column(
+                  children: [
+                    // Fixed header
+                    Container(
+                      color:
+                          AppTheme.primary.withValues(alpha: 0.08),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 10),
+                      child: Row(
+                        children: [
+                          SizedBox(
+                              width: 80,
+                              child: Text('Date',
                                   style: TextStyle(
-                                      fontSize: 12,
-                                      color: AppTheme.muted)),
-                              TextButton(
-                                style: TextButton.styleFrom(
-                                  foregroundColor:
-                                      AppTheme.expense,
-                                  padding: EdgeInsets.zero,
-                                  minimumSize:
-                                      const Size(48, 32),
-                                ),
-                                onPressed: () =>
-                                    _confirmDelete(
-                                        context, ref, r.txn),
-                                child: const Text('Delete',
+                                      fontWeight:
+                                          FontWeight.bold,
+                                      fontSize: 12))),
+                          SizedBox(
+                              width: 170,
+                              child: Text('Particulars',
+                                  style: TextStyle(
+                                      fontWeight:
+                                          FontWeight.bold,
+                                      fontSize: 12))),
+                          SizedBox(
+                              width: 110,
+                              child: Text('Category',
+                                  style: TextStyle(
+                                      fontWeight:
+                                          FontWeight.bold,
+                                      fontSize: 12))),
+                          SizedBox(
+                              width: 90,
+                              child: Text('Debit (Rs.)',
+                                  textAlign: TextAlign.right,
+                                  style: TextStyle(
+                                      fontWeight:
+                                          FontWeight.bold,
+                                      fontSize: 12))),
+                          SizedBox(
+                              width: 90,
+                              child: Text('Credit (Rs.)',
+                                  textAlign: TextAlign.right,
+                                  style: TextStyle(
+                                      fontWeight:
+                                          FontWeight.bold,
+                                      fontSize: 12))),
+                          SizedBox(
+                              width: 90,
+                              child: Text('Balance (Rs.)',
+                                  textAlign: TextAlign.right,
+                                  style: TextStyle(
+                                      fontWeight:
+                                          FontWeight.bold,
+                                      fontSize: 12))),
+                          SizedBox(
+                              width: 40,
+                              child: Text('Doc',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                      fontWeight:
+                                          FontWeight.bold,
+                                      fontSize: 12))),
+                          if (isAdmin)
+                            SizedBox(
+                                width: 100,
+                                child: Text('Action',
                                     style: TextStyle(
-                                        fontSize: 12)),
-                              ),
-                            ],
-                          )),
-                      ]),
-                  ],
+                                        fontWeight:
+                                            FontWeight.bold,
+                                        fontSize: 12))),
+                        ],
+                      ),
                     ),
-                  ),
+                    const Divider(height: 1),
+                    // Virtualized rows — only visible ones render
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: display.length,
+                        itemExtent: 48,
+                        itemBuilder: (context, i) {
+                          final r = display[i];
+                          return _LedgerListRow(
+                            row: r,
+                            isAdmin: isAdmin,
+                            onEdit: () =>
+                                Navigator.of(context).push(
+                              MaterialPageRoute(
+                                  builder: (_) =>
+                                      TxnFormScreen(
+                                          existing:
+                                              r.txn)),
+                            ),
+                            onDelete: () =>
+                                _confirmDelete(
+                                    context, ref, r.txn),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 ),
               ),
           ],
@@ -463,6 +426,135 @@ class _LedgerRow {
   final Txn txn;
   final double balance;
   _LedgerRow({required this.txn, required this.balance});
+}
+
+/// Virtualized ledger row — fixed height for ListView.builder.
+/// Wrapped in RepaintBoundary to avoid repainting off-screen rows.
+class _LedgerListRow extends StatelessWidget {
+  final _LedgerRow row;
+  final bool isAdmin;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  const _LedgerListRow({
+    required this.row,
+    required this.isAdmin,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final txn = row.txn;
+    return RepaintBoundary(
+      child: Container(
+        padding:
+            const EdgeInsets.symmetric(horizontal: 8),
+        decoration: const BoxDecoration(
+          border: Border(
+              bottom: BorderSide(
+                  color: Color(0x11000000), width: 1)),
+        ),
+        child: Row(
+          children: [
+            SizedBox(
+                width: 80,
+                child: Text(fmtDate(txn.date),
+                    style:
+                        const TextStyle(fontSize: 12))),
+            SizedBox(
+              width: 170,
+              child: Text(
+                txn.description.isEmpty
+                    ? '—'
+                    : txn.description,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 12),
+              ),
+            ),
+            SizedBox(
+                width: 110,
+                child: _ScopeBadge(txn: txn)),
+            SizedBox(
+                width: 90,
+                child: Text(
+                    txn.isDebit
+                        ? fmtMoney(txn.amount)
+                        : '-',
+                    textAlign: TextAlign.right,
+                    style:
+                        const TextStyle(fontSize: 12))),
+            SizedBox(
+                width: 90,
+                child: Text(
+                    txn.isInflow
+                        ? fmtMoney(txn.amount)
+                        : '-',
+                    textAlign: TextAlign.right,
+                    style:
+                        const TextStyle(fontSize: 12))),
+            SizedBox(
+                width: 90,
+                child: Text(fmtMoney(row.balance),
+                    textAlign: TextAlign.right,
+                    style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold))),
+            SizedBox(
+              width: 40,
+              child: (txn.receiptUrl ?? '').isEmpty
+                  ? const Text('-',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 12))
+                  : const Icon(Icons.attach_file,
+                      size: 16,
+                      color: AppTheme.primary),
+            ),
+            if (isAdmin)
+              SizedBox(
+                width: 100,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextButton(
+                      style: TextButton.styleFrom(
+                        foregroundColor:
+                            const Color(0xFFB45309),
+                        padding: EdgeInsets.zero,
+                        minimumSize:
+                            const Size(40, 32),
+                      ),
+                      onPressed: onEdit,
+                      child: const Text('Edit',
+                          style:
+                              TextStyle(fontSize: 12)),
+                    ),
+                    const Text('|',
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: AppTheme.muted)),
+                    TextButton(
+                      style: TextButton.styleFrom(
+                        foregroundColor:
+                            AppTheme.expense,
+                        padding: EdgeInsets.zero,
+                        minimumSize:
+                            const Size(48, 32),
+                      ),
+                      onPressed: onDelete,
+                      child: const Text('Delete',
+                          style:
+                              TextStyle(fontSize: 12)),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 /// Category / Scope badge: purple for investor, grey for category —
