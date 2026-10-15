@@ -238,6 +238,8 @@ class PettyCash {
   final DateTime updatedAt;
   /// 'fund' = money added INTO petty cash, 'spend' = money spent FROM it.
   final String kind;
+  /// Links a 'fund' entry to its main-ledger transaction (for cascade delete).
+  final String? txnId;
 
   PettyCash({
     required this.id,
@@ -247,6 +249,7 @@ class PettyCash {
     required this.createdBy,
     required this.updatedAt,
     this.kind = 'spend',
+    this.txnId,
   });
 
   bool get isFund => kind == 'fund';
@@ -263,6 +266,7 @@ class PettyCash {
             ? _dt(m['updated_at'])
             : DateTime.fromMillisecondsSinceEpoch(0),
         kind: (m['kind'] ?? 'spend') as String,
+        txnId: m['txn_id'] as String?,
       );
 
   Map<String, dynamic> toMap() => {
@@ -273,6 +277,7 @@ class PettyCash {
         'created_by': createdBy,
         'updated_at': _iso(updatedAt),
         'kind': kind,
+        'txn_id': txnId,
       };
 
   Map<String, dynamic> toRemoteMap() => {
@@ -283,5 +288,6 @@ class PettyCash {
         'created_by': createdBy,
         'updated_at': _iso(updatedAt),
         'kind': kind,
+        'txn_id': txnId,
       };
 }

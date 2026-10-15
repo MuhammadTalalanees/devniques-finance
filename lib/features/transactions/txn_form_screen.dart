@@ -177,6 +177,7 @@ class _TxnFormScreenState extends ConsumerState<TxnFormScreen> {
           createdBy: profile.id,
           updatedAt: now,
           kind: 'fund',
+          txnId: txn.id,
         );
         await pettyRepo.add(pettyEntry);
         if (mounted) Navigator.of(context).pop();

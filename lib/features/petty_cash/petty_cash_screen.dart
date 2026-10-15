@@ -180,6 +180,14 @@ class PettyCashScreen extends ConsumerWidget {
                                                 ) ??
                                             false;
                                         if (confirm) {
+                                          // Cascade delete: if this petty cash
+                                          // fund entry is linked to a ledger
+                                          // transaction, delete that too
+                                          if (p.txnId != null) {
+                                            await ref
+                                                .read(txnRepoProvider)
+                                                .remove(p.txnId!);
+                                          }
                                           await ref
                                               .read(
                                                   pettyCashRepoProvider)

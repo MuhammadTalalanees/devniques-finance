@@ -262,6 +262,36 @@ class _TxnTile extends ConsumerWidget {
                     ) ??
                     false;
                 if (confirm) {
+                  // Cascade delete: if this is a petty cash fund entry,
+                  // also delete the linked petty cash record
+                  if (txn.description
+                      .startsWith('Petty cash fund - ')) {
+                    final pettyEntries = await ref.read(
+                        pettyCashListProvider.future);
+                    for (final pe in pettyEntries
+                        .where((p) => p.txnId == txn.id)) {
+                      await ref
+                          .read(pettyCashRepoProvider)
+                          .remove(pe.id);
+                    }
+                    // Fallback: match by amount/date for old entries
+                    // without txnId link
+                    final txnDate = txn.date
+                        .toIso8601String()
+                        .substring(0, 10);
+                    for (final pe in pettyEntries.where((p) =>
+                        p.isFund &&
+                        p.txnId == null &&
+                        p.amount == txn.amount &&
+                        p.date
+                                .toIso8601String()
+                                .substring(0, 10) ==
+                            txnDate)) {
+                      await ref
+                          .read(pettyCashRepoProvider)
+                          .remove(pe.id);
+                    }
+                  }
                   await ref.read(txnRepoProvider).remove(txn.id);
                 }
               },
