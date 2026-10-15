@@ -169,6 +169,14 @@ class Txn {
   bool get isProfit => type == 'profit';
   bool get isDebit => type == 'debit';
 
+  /// True if this is a "Petty cash fund" ledger entry (saved as debit).
+  /// Matches both "Petty cash fund" (empty description) and
+  /// "Petty cash fund - <notes>" formats.
+  bool get isPettyCashFund =>
+      type == 'debit' &&
+      (description == 'Petty cash fund' ||
+          description.startsWith('Petty cash fund - '));
+
   factory Txn.fromMap(Map<String, dynamic> m) => Txn(
         id: m['id'] as String,
         type: (m['type'] ?? 'debit') as String,

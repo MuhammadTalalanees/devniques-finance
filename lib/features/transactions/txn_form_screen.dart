@@ -43,10 +43,7 @@ class _TxnFormScreenState extends ConsumerState<TxnFormScreen> {
 
   /// True if editing a "Petty cash fund" ledger entry (saved as debit).
   bool get _isPettyFundEdit =>
-      _isEdit &&
-      (widget.existing?.description
-              .startsWith('Petty cash fund - ') ??
-          false);
+      _isEdit && (widget.existing?.isPettyCashFund ?? false);
 
   @override
   void initState() {
@@ -59,7 +56,7 @@ class _TxnFormScreenState extends ConsumerState<TxnFormScreen> {
           ? e.type
           : 'debit';
       // If editing a petty cash fund entry, show it as credit + checked
-      if (e.description.startsWith('Petty cash fund - ')) {
+      if (e.isPettyCashFund) {
         _type = 'credit';
         _pettyCashFund = true;
       }

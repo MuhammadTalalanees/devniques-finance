@@ -264,8 +264,7 @@ class _TxnTile extends ConsumerWidget {
                 if (confirm) {
                   // Cascade delete: if this is a petty cash fund entry,
                   // also delete the linked petty cash record
-                  if (txn.description
-                      .startsWith('Petty cash fund - ')) {
+                  if (txn.isPettyCashFund) {
                     final pettyEntries = await ref.read(
                         pettyCashListProvider.future);
                     for (final pe in pettyEntries
