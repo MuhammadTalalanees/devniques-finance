@@ -214,6 +214,7 @@ class PettyCashScreen extends ConsumerWidget {
     final descCtrl = TextEditingController();
     final profile = ref.read(profileProvider).value;
     var isFund = false; // false = spend, true = add funds
+    var selectedDate = DateTime.now();
     showDialog(
       context: context,
       builder: (_) => StatefulBuilder(
@@ -259,6 +260,31 @@ class PettyCashScreen extends ConsumerWidget {
                         ? 'Note (e.g. monthly float)'
                         : 'Description (e.g. lunch)'),
               ),
+              const SizedBox(height: 12),
+              InkWell(
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: ctx,
+                    initialDate: selectedDate,
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime.now(),
+                  );
+                  if (picked != null) {
+                    setState(() => selectedDate = picked);
+                  }
+                },
+                child: InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: 'Date',
+                    prefixIcon: Icon(Icons.calendar_today),
+                  ),
+                  child: Text(
+                    '${selectedDate.day.toString().padLeft(2, '0')} '
+                    '${_monthName(selectedDate.month)} '
+                    '${selectedDate.year}',
+                  ),
+                ),
+              ),
             ],
           ),
           actions: [
@@ -275,7 +301,7 @@ class PettyCashScreen extends ConsumerWidget {
                   id: newId(),
                   amount: amount,
                   description: descCtrl.text.trim(),
-                  date: now,
+                  date: selectedDate,
                   createdBy: profile?.id ?? '',
                   updatedAt: now,
                   kind: isFund ? 'fund' : 'spend',
@@ -316,4 +342,12 @@ class PettyCashScreen extends ConsumerWidget {
       text: 'Devniques Finance — Petty Cash',
     );
   }
+}
+
+String _monthName(int month) {
+  const names = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+  ];
+  return names[month - 1];
 }
