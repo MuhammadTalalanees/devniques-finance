@@ -161,7 +161,7 @@ class _KpiGrid extends ConsumerWidget {
         final kpis = [
           _Kpi('Current Net Balance', fmtMoney(balance), AppTheme.primary),
           _Kpi('Total Raised Capital', fmtMoney(raised), AppTheme.investment),
-          _Kpi('Total Operational Expenses', fmtMoney(expenses),
+          _Kpi('Total Expenses', fmtMoney(expenses),
               AppTheme.expense),
           _Kpi('Petty Cash', fmtMoney(pettyBalance), AppTheme.income),
         ];
@@ -213,6 +213,8 @@ class _Kpi extends StatelessWidget {
                     fontWeight: FontWeight.w600)),
             const SizedBox(height: 6),
             Text(value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                     color: color,
                     fontWeight: FontWeight.bold,
