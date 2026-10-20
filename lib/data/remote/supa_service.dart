@@ -39,6 +39,33 @@ class SupaService {
     return (res as List).map((e) => e['id'] as String).toList();
   }
 
+  // ---------- attendance (migration v7, read-only here) ----------
+  /// Sessions whose entry falls in [from, to). RLS decides visibility:
+  /// employees get only their own rows, admin gets everyone's.
+  Future<List<Map<String, dynamic>>> fetchAttendance(
+      DateTime from, DateTime to) async {
+    final res = await _c
+        .from('attendance_sessions')
+        .select()
+        .gte('entry_at', from.toUtc().toIso8601String())
+        .lt('entry_at', to.toUtc().toIso8601String())
+        .order('entry_at', ascending: false);
+    return (res as List).cast<Map<String, dynamic>>();
+  }
+
+  /// id -> display name for every profile (used by the admin attendance
+  /// list; falls back to email when a name is empty).
+  Future<Map<String, String>> fetchProfileNames() async {
+    final res = await _c.from('profiles').select('id, name, email');
+    final out = <String, String>{};
+    for (final r in (res as List).cast<Map<String, dynamic>>()) {
+      final name = (r['name'] ?? '') as String;
+      out[r['id'] as String] =
+          name.isNotEmpty ? name : (r['email'] ?? 'User') as String;
+    }
+    return out;
+  }
+
   // ---------- writes ----------
   Future<void> insertRow(String table, Map<String, dynamic> row) =>
       _c.from(table).insert(row);

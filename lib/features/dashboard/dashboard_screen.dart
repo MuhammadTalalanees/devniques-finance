@@ -6,6 +6,7 @@ import '../../core/formatters.dart';
 import '../../core/theme.dart';
 import '../../data/models.dart';
 import '../../data/repos.dart';
+import '../attendance/attendance_screen.dart';
 import '../petty_cash/petty_cash_screen.dart';
 import '../transactions/txn_form_screen.dart';
 
@@ -108,6 +109,8 @@ class DashboardScreen extends ConsumerWidget {
               _InvestorPortfolio(txns: list),
               const SizedBox(height: 16),
               const _PettyCashSummary(),
+              const SizedBox(height: 16),
+              const _AttendanceCard(),
               const SizedBox(height: 80),
             ],
           ),
@@ -1290,5 +1293,64 @@ class _PettyCashSummary extends ConsumerWidget {
       }
       await ref.read(pettyCashRepoProvider).remove(p.id);
     }
+  }
+}
+
+
+/// Compact home-page entry point for Attendance (migration v7).
+/// Admin ko dikhta hai abhi kitne log office mein hain; employee ko
+/// apni aaj ki status. Tap -> monthly Attendance list.
+class _AttendanceCard extends ConsumerWidget {
+  const _AttendanceCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profile = ref.watch(profileProvider);
+    final isAdmin =
+        profile.whenData((p) => p?.isAdmin ?? false).value ?? false;
+    final myId = profile.whenData((p) => p?.id).value;
+    final monthAsync =
+        ref.watch(attendanceMonthProvider(firstOfMonth(DateTime.now())));
+
+    String subtitle = 'Monthly attendance list';
+    monthAsync.whenData((sessions) {
+      final now = DateTime.now();
+      final today = sessions.where((s) =>
+          s.entryAt.year == now.year &&
+          s.entryAt.month == now.month &&
+          s.entryAt.day == now.day);
+      if (isAdmin) {
+        final present = today.where((s) => s.isOpen).length;
+        subtitle = present > 0
+            ? 'Abhi $present log office mein hain — monthly list'
+            : 'Monthly attendance list';
+      } else {
+        final mine = today.where((s) => s.userId == myId).toList();
+        final open = mine.where((s) => s.isOpen).firstOrNull;
+        if (open != null) {
+          subtitle = 'Aap office mein hain — In '
+              '${open.entryAt.hour.toString().padLeft(2, '0')}:'
+              '${open.entryAt.minute.toString().padLeft(2, '0')}';
+        } else if (mine.isNotEmpty) {
+          subtitle = 'Aaj ki attendance lag gayi hai — monthly list';
+        }
+      }
+    });
+
+    return Card(
+      child: ListTile(
+        leading: const CircleAvatar(
+          backgroundColor: AppTheme.primary,
+          child: Icon(Icons.fingerprint, color: Colors.white, size: 20),
+        ),
+        title: const Text('Attendance',
+            style: TextStyle(fontWeight: FontWeight.w700)),
+        subtitle: Text(subtitle),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const AttendanceScreen()),
+        ),
+      ),
+    );
   }
 }

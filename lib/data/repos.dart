@@ -327,6 +327,25 @@ final pettyCashListProvider =
   return rows.map(PettyCash.fromMap).toList();
 });
 
+/// Attendance for one calendar month. [month] is any day inside the
+/// month; sessions are fetched straight from Supabase (read-only —
+/// the Android attendance app writes them, this app only displays).
+final attendanceMonthProvider = FutureProvider.family<List<AttendanceSession>,
+    DateTime>((ref, month) async {
+  final supa = ref.watch(supaServiceProvider);
+  final from = DateTime(month.year, month.month, 1);
+  final to = DateTime(month.year, month.month + 1, 1);
+  final rows = await supa.fetchAttendance(from, to);
+  return rows.map(AttendanceSession.fromMap).toList();
+});
+
+/// id -> name map for showing names in the admin attendance list.
+final profileNamesProvider =
+    FutureProvider<Map<String, String>>((ref) async {
+  final supa = ref.watch(supaServiceProvider);
+  return supa.fetchProfileNames();
+});
+
 class PettyCashRepo {
   PettyCashRepo(this._ref);
   final Ref _ref;

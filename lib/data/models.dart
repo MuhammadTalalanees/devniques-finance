@@ -303,3 +303,39 @@ class PettyCash {
         'txn_id': txnId,
       };
 }
+
+/// One office visit, recorded automatically when the employee's phone
+/// joins / leaves the office WiFi (migration v7). Read-only in this app:
+/// attendance records are never edited or deleted here.
+class AttendanceSession {
+  final String id;
+  final String userId;
+  final DateTime entryAt;
+  final DateTime? exitAt; // null = still in office
+  final String ssid;
+  final String bssid;
+
+  AttendanceSession({
+    required this.id,
+    required this.userId,
+    required this.entryAt,
+    this.exitAt,
+    this.ssid = '',
+    this.bssid = '',
+  });
+
+  bool get isOpen => exitAt == null;
+
+  /// Time spent in office for this session (open session counts till now).
+  Duration get duration => (exitAt ?? DateTime.now()).difference(entryAt);
+
+  factory AttendanceSession.fromMap(Map<String, dynamic> m) =>
+      AttendanceSession(
+        id: m['id'] as String,
+        userId: (m['user_id'] ?? '') as String,
+        entryAt: _dt(m['entry_at']),
+        exitAt: m['exit_at'] != null ? _dt(m['exit_at']) : null,
+        ssid: (m['ssid'] ?? '') as String,
+        bssid: (m['bssid'] ?? '') as String,
+      );
+}
