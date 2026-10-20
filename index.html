@@ -41,17 +41,24 @@
     For more details:
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
+  <div id="df-loading" style="position:fixed;inset:0;background:#f4f6f5;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:sans-serif;z-index:99998;">
+    <div style="width:44px;height:44px;border-radius:50%;border:5px solid #d8e2dc;border-top-color:#0a7a4b;animation:dfspin 0.9s linear infinite;"></div>
+    <p id="df-loading-text" style="margin-top:18px;color:#444;font-size:15px;">Devniques Finance load ho raha hai…</p>
+    <style>@keyframes dfspin{to{transform:rotate(360deg)}}</style>
+  </div>
   <script src="flutter_bootstrap.js" async></script>
   <script>
-    // Self-heal (Ultron, 2026-10-20): agar kisi browser mein purana
-    // service worker / cache phans jaye to app safed screen par ruk
-    // jati thi. Agar pehla frame waqt par na aye to ek dafa saara
-    // purana cache saaf karke fresh reload karo; phir bhi na chale
-    // to safed screen ki jagah saaf hidayat dikhao.
+    // Self-heal v2 (Ultron, 2026-10-20): safed screen ki teen wajahen
+    // dekhi gayin — (1) Google CDN rukna [local CanvasKit se hal],
+    // (2) purana service worker phansna [neeche auto-saaf],
+    // (3) slow/throttled net par 11MB files ka late ana [loading
+    // screen + lamba timer, download beech mein NAHI kaatna].
     (function () {
       var booted = false;
       window.addEventListener('flutter-first-frame', function () {
         booted = true;
+        var el = document.getElementById('df-loading');
+        if (el) el.remove();
         try { sessionStorage.removeItem('df_healed'); } catch (e) {}
       });
       setTimeout(function () {
@@ -75,15 +82,12 @@
             setTimeout(function () { location.reload(); }, 400);
           });
         }
-      }, 18000);
+      }, 60000);
       setTimeout(function () {
         if (booted) return;
-        var div = document.createElement('div');
-        div.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;font-family:sans-serif;color:#444;background:#fff;z-index:99999;text-align:center;padding:24px;';
-        div.innerHTML = '<div><p style="font-size:17px;margin:0 0 8px;">App load honay mein masla aa raha hai.</p>' +
-          '<p style="font-size:14px;margin:0;">Ek dafa <b>Ctrl + Shift + R</b> dabayen.<br>Agar phir bhi na chale to yehi link <b>Incognito window</b> (Ctrl+Shift+N) mein khol kar dekhen.</p></div>';
-        document.body.appendChild(div);
-      }, 45000);
+        var t = document.getElementById('df-loading-text');
+        if (t) t.textContent = 'Abhi bhi load ho raha hai — net slow hai to kuch minute lag sakte hain. Page khula rakhen, khud khul jayega.';
+      }, 150000);
     })();
   </script>
 </body>
