@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <!--
+    If you are serving your web app in a path other than the root, change the
+    href value below to reflect the base path you are serving from.
+
+    The path provided below has to start and end with a slash "/" in order for
+    it to work correctly.
+
+    For more details:
+    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
+
+    This is a placeholder for base href that will be replaced by the value of
+    the `--base-href` argument provided to `flutter build`.
+  -->
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="A new Flutter project.">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="devniques_finance">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>devniques_finance</title>
+  <link rel="manifest" href="manifest.json">
+</head>
+<body>
+  <!--
+    You can customize the "flutter_bootstrap.js" script.
+    This is useful to provide a custom configuration to the Flutter loader
+    or to give the user feedback during the initialization process.
+
+    For more details:
+    * https://docs.flutter.dev/platform-integration/web/initialization
+  -->
+  <script src="flutter_bootstrap.js" async></script>
+  <script>
+    // Self-heal (Ultron, 2026-10-20): agar kisi browser mein purana
+    // service worker / cache phans jaye to app safed screen par ruk
+    // jati thi. Agar pehla frame waqt par na aye to ek dafa saara
+    // purana cache saaf karke fresh reload karo; phir bhi na chale
+    // to safed screen ki jagah saaf hidayat dikhao.
+    (function () {
+      var booted = false;
+      window.addEventListener('flutter-first-frame', function () {
+        booted = true;
+        try { sessionStorage.removeItem('df_healed'); } catch (e) {}
+      });
+      setTimeout(function () {
+        if (booted) return;
+        var healed = false;
+        try { healed = !!sessionStorage.getItem('df_healed'); } catch (e) {}
+        if (!healed) {
+          try { sessionStorage.setItem('df_healed', '1'); } catch (e) {}
+          var jobs = [];
+          if ('serviceWorker' in navigator) {
+            jobs.push(navigator.serviceWorker.getRegistrations().then(function (regs) {
+              regs.forEach(function (r) { r.unregister(); });
+            }).catch(function () {}));
+          }
+          if (window.caches && caches.keys) {
+            jobs.push(caches.keys().then(function (keys) {
+              keys.forEach(function (k) { caches.delete(k); });
+            }).catch(function () {}));
+          }
+          Promise.all(jobs).then(function () {
+            setTimeout(function () { location.reload(); }, 400);
+          });
+        }
+      }, 18000);
+      setTimeout(function () {
+        if (booted) return;
+        var div = document.createElement('div');
+        div.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;font-family:sans-serif;color:#444;background:#fff;z-index:99999;text-align:center;padding:24px;';
+        div.innerHTML = '<div><p style="font-size:17px;margin:0 0 8px;">App load honay mein masla aa raha hai.</p>' +
+          '<p style="font-size:14px;margin:0;">Ek dafa <b>Ctrl + Shift + R</b> dabayen.<br>Agar phir bhi na chale to yehi link <b>Incognito window</b> (Ctrl+Shift+N) mein khol kar dekhen.</p></div>';
+        document.body.appendChild(div);
+      }, 45000);
+    })();
+  </script>
+</body>
+</html>
