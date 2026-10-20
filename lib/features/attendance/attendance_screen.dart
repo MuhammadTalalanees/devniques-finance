@@ -76,8 +76,8 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16),
             child: Text(
-              'Attendance office WiFi se auto lagti hai. '
-              'Record edit ya delete nahi hota.',
+              'Attendance is recorded automatically via office WiFi. '
+              'Records cannot be edited or deleted.',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 12, color: AppTheme.muted),
             ),
@@ -95,7 +95,7 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
                 error: (e, _) => ListView(children: [
                   const SizedBox(height: 120),
                   Center(
-                      child: Text('Attendance load nahi ho saki.\n$e',
+                      child: Text('Could not load attendance.\n$e',
                           textAlign: TextAlign.center)),
                 ]),
                 data: (sessions) {
@@ -103,7 +103,7 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
                     return ListView(children: const [
                       SizedBox(height: 120),
                       Center(
-                          child: Text('Is month mein koi attendance nahi.')),
+                          child: Text('No attendance recorded this month.')),
                     ]);
                   }
                   // Group: user -> day -> sessions
@@ -212,7 +212,7 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
                   color: AppTheme.income.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: const Text('Office mein hai',
+                child: const Text('In office',
                     style: TextStyle(
                         fontSize: 11,
                         color: AppTheme.income,

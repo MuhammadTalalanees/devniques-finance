@@ -43,7 +43,7 @@
   -->
   <div id="df-loading" style="position:fixed;inset:0;background:#f4f6f5;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:sans-serif;z-index:99998;">
     <div style="width:44px;height:44px;border-radius:50%;border:5px solid #d8e2dc;border-top-color:#0a7a4b;animation:dfspin 0.9s linear infinite;"></div>
-    <p id="df-loading-text" style="margin-top:18px;color:#444;font-size:15px;">Devniques Finance load ho raha hai…</p>
+    <p id="df-loading-text" style="margin-top:18px;color:#444;font-size:15px;">Devniques Finance is loading…</p>
     <style>@keyframes dfspin{to{transform:rotate(360deg)}}</style>
   </div>
   <script src="flutter_bootstrap.js" async></script>
@@ -86,7 +86,7 @@
       setTimeout(function () {
         if (booted) return;
         var t = document.getElementById('df-loading-text');
-        if (t) t.textContent = 'Abhi bhi load ho raha hai — net slow hai to kuch minute lag sakte hain. Page khula rakhen, khud khul jayega.';
+        if (t) t.textContent = 'Still loading — on a slow connection this can take a few minutes. Please keep this page open.';
       }, 150000);
     })();
   </script>

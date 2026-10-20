@@ -1322,17 +1322,17 @@ class _AttendanceCard extends ConsumerWidget {
       if (isAdmin) {
         final present = today.where((s) => s.isOpen).length;
         subtitle = present > 0
-            ? 'Abhi $present log office mein hain — monthly list'
+            ? '$present ${present == 1 ? 'person is' : 'people are'} in the office right now — monthly list'
             : 'Monthly attendance list';
       } else {
         final mine = today.where((s) => s.userId == myId).toList();
         final open = mine.where((s) => s.isOpen).firstOrNull;
         if (open != null) {
-          subtitle = 'Aap office mein hain — In '
+          subtitle = 'You are in the office — In '
               '${open.entryAt.hour.toString().padLeft(2, '0')}:'
               '${open.entryAt.minute.toString().padLeft(2, '0')}';
         } else if (mine.isNotEmpty) {
-          subtitle = 'Aaj ki attendance lag gayi hai — monthly list';
+          subtitle = "Today's attendance is marked — monthly list";
         }
       }
     });
