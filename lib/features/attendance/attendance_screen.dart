@@ -119,9 +119,12 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
                     itemBuilder: (context, i) {
                       final uid = userIds[i];
                       final userSessions = byUser[uid]!;
-                      final monthTotal = userSessions.fold<Duration>(
-                          Duration.zero, (sum, s) => sum + s.duration);
                       final days = _groupByDay(userSessions);
+                      // Working hours = first entry se last exit tak (span),
+                      // Talal ka rule 2026-10-20. Month total = dinon ke
+                      // spans ka jor.
+                      final monthTotal = days.fold<Duration>(
+                          Duration.zero, (sum, d) => sum + d.total);
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
@@ -254,6 +257,16 @@ class _DaySummary {
   final List<AttendanceSession> sessions;
   _DaySummary({required this.day, required this.sessions});
 
-  Duration get total =>
-      sessions.fold<Duration>(Duration.zero, (sum, s) => sum + s.duration);
+  /// Working hours: pehli entry se akhri exit tak ka span — beech mein
+  /// employee kitni baar bhi bahir jaye, wo time bhi count hota hai
+  /// (Talal ka rule, 2026-10-20). Sessions ki tafseel alag dikhti hai.
+  Duration get total {
+    final first = sessions.first.entryAt;
+    final end = sessions.any((s) => s.isOpen)
+        ? DateTime.now()
+        : sessions
+            .map((s) => s.exitAt!)
+            .reduce((a, b) => a.isAfter(b) ? a : b);
+    return end.difference(first);
+  }
 }
