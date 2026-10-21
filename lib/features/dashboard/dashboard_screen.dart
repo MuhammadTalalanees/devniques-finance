@@ -69,23 +69,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               },
               child: const Text('Devniques Finance'),
             ),
-            const SizedBox(width: 10),
-            // Human Resources button — opens the HR page (attendance
-            // of everyone; the home page no longer carries it).
-            OutlinedButton.icon(
-              icon: const Icon(Icons.groups, size: 18),
-              label: Text(MediaQuery.of(context).size.width > 700
-                  ? 'Human Resources (HR)'
-                  : 'HR'),
-              style: OutlinedButton.styleFrom(
-                visualDensity: VisualDensity.compact,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              ),
-              onPressed: () => Navigator.of(context).push(
+            const SizedBox(width: 14),
+            // Human Resources — written exactly like the title
+            // (plain text, no button box); tap opens the HR page
+            // (attendance of everyone; home no longer carries it).
+            InkWell(
+              onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(
                     builder: (_) => const AttendanceScreen()),
               ),
+              child: Text(MediaQuery.of(context).size.width > 700
+                  ? 'Human Resources (HR)'
+                  : 'HR'),
             ),
           ],
         ),
@@ -1409,9 +1404,14 @@ class _InvestorsPanel extends ConsumerWidget {
                         TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 const Spacer(),
                 if (isAdmin)
-                  IconButton(
-                    icon: const Icon(Icons.add_circle_outline),
-                    tooltip: 'Add investor',
+                  FilledButton.icon(
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Add'),
+                    style: FilledButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                    ),
                     onPressed: () => _showForm(context, ref, null),
                   ),
               ],
@@ -1455,7 +1455,8 @@ class _InvestorsPanel extends ConsumerWidget {
                 return Column(
                   children: [
                     for (final p in investors)
-                      _investorRow(context, ref, p, raised),
+                      _investorRow(
+                          context, ref, p, raised, _investedOf(p.name)),
                   ],
                 );
               },
@@ -1466,8 +1467,18 @@ class _InvestorsPanel extends ConsumerWidget {
     );
   }
 
-  Widget _investorRow(
-      BuildContext context, WidgetRef ref, Party p, double raised) {
+  /// What this investor has actually put in so far (sum of their
+  /// investment entries) — shown until the admin sets a share %.
+  double _investedOf(String name) {
+    final n = name.trim().toLowerCase();
+    return txns
+        .where((t) =>
+            t.isInvestment && t.investor.trim().toLowerCase() == n)
+        .fold(0.0, (a, t) => a + t.amount);
+  }
+
+  Widget _investorRow(BuildContext context, WidgetRef ref, Party p,
+      double raised, double invested) {
     final pct = p.sharePercent;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
@@ -1492,7 +1503,7 @@ class _InvestorsPanel extends ConsumerWidget {
                 Text(
                   pct != null
                       ? '${_fmtPct(pct)}%  ·  ${fmtMoney(raised * pct / 100)}'
-                      : 'Share % not set',
+                      : '${fmtMoney(invested)}  ·  Share % not set',
                   style:
                       const TextStyle(color: AppTheme.muted, fontSize: 12.5),
                 ),
