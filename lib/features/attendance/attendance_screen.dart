@@ -238,7 +238,7 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
                 ),
                 title: Text(
                   '${_time.format(s.entryAt)}  →  '
-                  '${s.isOpen ? 'abhi tak' : _time.format(s.exitAt!)}',
+                  '${s.isOpen ? 'still in' : _time.format(s.exitAt!)}',
                   style: const TextStyle(fontSize: 13.5),
                 ),
                 trailing: Text(_fmtDur(s.duration),
