@@ -20,8 +20,13 @@ class AttendanceScreen extends ConsumerStatefulWidget {
   ConsumerState<AttendanceScreen> createState() => _AttendanceScreenState();
 }
 
+/// An instant re-framed as Pakistan wall time (UTC+5, no DST):
+/// its fields read as the PKT clock. Attendance days and times
+/// are always shown in PKT, wherever the viewer is.
+DateTime pkt(DateTime t) => t.toUtc().add(const Duration(hours: 5));
+
 class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
-  DateTime _month = firstOfMonth(DateTime.now());
+  DateTime _month = firstOfMonth(pkt(DateTime.now()));
 
   static final _time = DateFormat('hh:mm a');
 
@@ -41,7 +46,7 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
     final myId = profile.whenData((p) => p?.id).value;
     final names = namesAsync.value ?? const <String, String>{};
 
-    final now = DateTime.now();
+    final now = pkt(DateTime.now());
     final canGoNext =
         _month.year < now.year || (_month.year == now.year && _month.month < now.month);
 
@@ -80,8 +85,9 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
               'or marked manually from the attendance app (Manual '
               'badge). Working hours run from the first WiFi entry '
               'to the last WiFi exit of the day; a manual session '
-              'closes with that last WiFi exit (auto). Records '
-              'cannot be edited or deleted.',
+              'closes with that last WiFi exit (auto). All times '
+              'are Pakistan time. Records cannot be edited or '
+              'deleted.',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 12, color: AppTheme.muted),
             ),
@@ -179,7 +185,8 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
   List<_DaySummary> _groupByDay(List<AttendanceSession> sessions) {
     final byDay = <DateTime, List<AttendanceSession>>{};
     for (final s in sessions) {
-      final day = DateTime(s.entryAt.year, s.entryAt.month, s.entryAt.day);
+      final p = pkt(s.entryAt);
+      final day = DateTime(p.year, p.month, p.day);
       byDay.putIfAbsent(day, () => []).add(s);
     }
     final days = byDay.entries.map((e) {
@@ -237,8 +244,8 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
           ],
         ),
         subtitle: Text(
-          'In ${_time.format(firstIn)}'
-          '${lastOut != null ? '  •  Out ${_time.format(lastOut)}' : ''}'
+          'In ${_time.format(pkt(firstIn))}'
+          '${lastOut != null ? '  •  Out ${_time.format(pkt(lastOut))}' : ''}'
           '  •  ${_fmtDur(d.total)}'
           '${d.sessions.length > 1 ? '  •  ${d.sessions.length} sessions' : ''}',
           style: const TextStyle(color: AppTheme.muted, fontSize: 12.5),
@@ -260,8 +267,8 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
                 children: [
                   Expanded(
                     child: Text(
-                      '${_time.format(s.entryAt)}  →  '
-                      '${isOpenNow ? 'still in' : _time.format(eff)}'
+                      '${_time.format(pkt(s.entryAt))}  →  '
+                      '${isOpenNow ? 'still in' : _time.format(pkt(eff))}'
                       '${autoClosed ? ' (auto)' : ''}',
                       style: const TextStyle(fontSize: 13.5),
                     ),

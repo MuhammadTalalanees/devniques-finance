@@ -336,9 +336,13 @@ final pettyCashListProvider =
 final attendanceMonthProvider = FutureProvider.family<List<AttendanceSession>,
     DateTime>((ref, month) async {
   final supa = ref.watch(supaServiceProvider);
-  final from = DateTime(month.year, month.month, 1);
-  final to = DateTime(month.year, month.month + 1, 1);
-  final rows = await supa.fetchAttendance(from, to);
+  // The month is always read on the Pakistan (UTC+5) calendar —
+  // the office is there, wherever the viewer happens to be.
+  final fromUtc = DateTime.utc(month.year, month.month, 1)
+      .subtract(const Duration(hours: 5));
+  final toUtc = DateTime.utc(month.year, month.month + 1, 1)
+      .subtract(const Duration(hours: 5));
+  final rows = await supa.fetchAttendance(fromUtc, toUtc);
   return rows.map(AttendanceSession.fromMap).toList();
 });
 
