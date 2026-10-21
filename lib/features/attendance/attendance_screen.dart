@@ -86,8 +86,9 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
               'badge). Working hours run from the first WiFi entry '
               'to the last WiFi exit of the day; a manual session '
               'closes with that last WiFi exit (auto). All times '
-              'are Pakistan time. Records cannot be edited or '
-              'deleted.',
+              'are Pakistan time. A red Detector off badge marks a '
+              'day whose session never closed. Records cannot be '
+              'edited or deleted.',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 12, color: AppTheme.muted),
             ),
@@ -201,6 +202,11 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
     final firstIn = d.trackFirst;
     final open = d.anyOpen;
     final lastOut = open ? null : d.lastEffExit;
+    // A session still open from a PREVIOUS (PKT) day can only
+    // mean the exit never arrived — that phone's detector was
+    // off. Flag the day for the admin (Talal, 2026-10-21).
+    final n = pkt(DateTime.now());
+    final stale = open && d.day.isBefore(DateTime(n.year, n.month, n.day));
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: ExpansionTile(
@@ -211,7 +217,21 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
               child: Text(fmtDate(d.day),
                   style: const TextStyle(fontWeight: FontWeight.w600)),
             ),
-            if (open)
+            if (stale)
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFCE4EC),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Text('Detector off?',
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: Color(0xFFC62828),
+                        fontWeight: FontWeight.w700)),
+              )
+            else if (open)
               Container(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
