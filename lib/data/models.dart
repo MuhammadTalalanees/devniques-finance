@@ -170,6 +170,24 @@ class Txn {
     required this.updatedAt,
   });
 
+  Txn copyWith({String? investor, DateTime? updatedAt}) => Txn(
+        id: id,
+        type: type,
+        amount: amount,
+        categoryId: categoryId,
+        categoryName: categoryName,
+        partyId: partyId,
+        partyName: partyName,
+        investor: investor ?? this.investor,
+        date: date,
+        description: description,
+        paymentMethod: paymentMethod,
+        receiptUrl: receiptUrl,
+        receiptLocal: receiptLocal,
+        createdBy: createdBy,
+        updatedAt: updatedAt ?? this.updatedAt,
+      );
+
   /// Money coming in (credit, investment, or profit) vs money going out (debit).
   bool get isInflow =>
       type == 'credit' || type == 'investment' || type == 'profit';

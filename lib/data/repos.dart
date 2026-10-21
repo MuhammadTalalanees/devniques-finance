@@ -471,6 +471,67 @@ class PartyRepo {
     _ref.invalidate(partyListProvider);
     _ref.read(syncProvider.notifier).syncNow();
   }
+
+  /// Saves an investor from the Investors panel / screen.
+  ///
+  /// An investor can exist in two ways: as a real party record, or
+  /// name-only (id 'txn-<name>') through their investment entries.
+  /// Saving a name-only investor creates the real record under a
+  /// fresh UUID. A rename (of either kind) also renames the investor
+  /// tag on their entries — otherwise the old name keeps showing as
+  /// a second investor.
+  Future<void> saveInvestor(Party p, List<Txn> txns,
+      {String? previousName}) async {
+    if (p.id.startsWith('txn-')) {
+      final oldName = p.id.substring(4);
+      await add(Party(
+        id: newId(),
+        name: p.name,
+        kind: 'investor',
+        phone: p.phone,
+        email: p.email,
+        notes: p.notes,
+        sharePercent: p.sharePercent,
+        updatedAt: p.updatedAt,
+      ));
+      if (oldName.trim().toLowerCase() !=
+          p.name.trim().toLowerCase()) {
+        await _retagInvestor(txns, oldName, p.name);
+      }
+    } else {
+      await update(p);
+      if (previousName != null &&
+          previousName.trim().toLowerCase() !=
+              p.name.trim().toLowerCase()) {
+        await _retagInvestor(txns, previousName, p.name);
+      }
+    }
+  }
+
+  /// Deletes an investor so it stays deleted: removes the party
+  /// record (when there is one) AND clears the investor name from
+  /// their entries — the entries themselves stay in the ledger.
+  /// Without the second step a name-only investor would simply
+  /// reappear from its entries.
+  Future<void> removeInvestor(Party p, List<Txn> txns) async {
+    if (!p.id.startsWith('txn-')) {
+      await remove(p.id);
+    }
+    await _retagInvestor(txns, p.name, '');
+  }
+
+  Future<void> _retagInvestor(
+      List<Txn> txns, String from, String to) async {
+    final f = from.trim().toLowerCase();
+    if (f.isEmpty) return;
+    final repo = _ref.read(txnRepoProvider);
+    for (final t in txns) {
+      if (t.isInvestment && t.investor.trim().toLowerCase() == f) {
+        await repo.update(
+            t.copyWith(investor: to, updatedAt: DateTime.now()));
+      }
+    }
+  }
 }
 
 final partyRepoProvider = Provider((ref) => PartyRepo(ref));

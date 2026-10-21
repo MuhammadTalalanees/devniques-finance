@@ -1535,7 +1535,9 @@ class _InvestorsPanel extends ConsumerWidget {
           context: context,
           builder: (_) => AlertDialog(
             title: const Text('Delete investor?'),
-            content: Text('Remove "${p.name}" from investors?'),
+            content: Text('Remove "${p.name}" from investors? '
+                'His ledger entries stay — only the investor name '
+                'is removed from them.'),
             actions: [
               TextButton(
                   onPressed: () => Navigator.pop(context, false),
@@ -1548,7 +1550,7 @@ class _InvestorsPanel extends ConsumerWidget {
         ) ??
         false;
     if (confirm) {
-      await ref.read(partyRepoProvider).remove(p.id);
+      await ref.read(partyRepoProvider).removeInvestor(p, txns);
     }
   }
 
@@ -1602,7 +1604,7 @@ class _InvestorsPanel extends ConsumerWidget {
               final pct = pctText.isEmpty ? null : double.tryParse(pctText);
               final now = DateTime.now();
               final party = Party(
-                id: existing?.id ?? '${now.millisecondsSinceEpoch}',
+                id: existing?.id ?? newId(),
                 name: name,
                 kind: 'investor',
                 phone: phoneCtrl.text.trim(),
@@ -1615,7 +1617,8 @@ class _InvestorsPanel extends ConsumerWidget {
               if (existing == null) {
                 await repo.add(party);
               } else {
-                await repo.update(party);
+                await repo.saveInvestor(party, txns,
+                    previousName: existing.name);
               }
               if (context.mounted) Navigator.pop(context);
             },

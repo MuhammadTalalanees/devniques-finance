@@ -49,7 +49,7 @@ create table public.categories (
 create table public.parties (
   id uuid primary key default gen_random_uuid(),
   name text not null,
-  kind text not null check (kind in ('client','vendor','employee','other')),
+  kind text not null check (kind in ('client','vendor','employee','other','investor')),
   phone text,
   email text,
   notes text,
@@ -59,12 +59,15 @@ create table public.parties (
 );
 
 -- ---------- transactions ----------
+-- type: 'debit' = money out (expense), 'credit' = money in (general),
+--       'investment' = money in from an investor (investor column set)
 create table public.transactions (
   id uuid primary key default gen_random_uuid(),
-  type text not null check (type in ('income','expense')),
+  type text not null check (type in ('debit','credit','investment')),
   amount numeric(14,2) not null check (amount > 0),
   category_id uuid references public.categories(id) on delete set null,
   party_id uuid references public.parties(id) on delete set null,
+  investor text not null default '',
   date date not null default CURRENT_DATE,
   description text not null default '',
   payment_method text not null default 'Cash'
@@ -185,19 +188,17 @@ create policy "receipt_delete_admin" on storage.objects
   for delete to authenticated using (bucket_id = 'receipts' and public.is_admin());
 
 -- ============================================================
--- SEED: default categories
+-- SEED: default categories (mirrors the Devniques Expense Tracker)
 -- ============================================================
 insert into public.categories (name, type, color) values
-  ('Client Payments', 'income', '#34d399'),
-  ('Other Income',    'income', '#22d3ee'),
-  ('Salaries',        'expense', '#f87171'),
-  ('Office Rent',     'expense', '#fb923c'),
-  ('Utilities',       'expense', '#fbbf24'),
-  ('Marketing',       'expense', '#a78bfa'),
-  ('Software & Tools','expense', '#5b9dff'),
-  ('Travel',          'expense', '#38bdf8'),
-  ('Office Supplies', 'expense', '#4ade80'),
-  ('Miscellaneous',   'both',   '#94a3b8')
+  ('Vendor Payments',      'expense', '#ef4444'),
+  ('Rent & Utilities',     'expense', '#fb923c'),
+  ('Office Setup & Maint', 'expense', '#fbbf24'),
+  ('IT & Equipment',       'expense', '#5b9dff'),
+  ('Salaries & Wages',     'expense', '#f87171'),
+  ('Food & Entertainment', 'expense', '#a78bfa'),
+  ('Office Running',       'expense', '#4ade80'),
+  ('Other',                'expense', '#94a3b8')
 on conflict (name) do nothing;
 
 -- ============================================================
