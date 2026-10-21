@@ -78,7 +78,10 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
             child: Text(
               'Attendance is recorded automatically via office WiFi, '
               'or marked manually from the attendance app (Manual '
-              'badge). Records cannot be edited or deleted.',
+              'badge). Working hours run from the first WiFi entry '
+              'to the last WiFi exit of the day; a manual session '
+              'closes with that last WiFi exit (auto). Records '
+              'cannot be edited or deleted.',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 12, color: AppTheme.muted),
             ),
@@ -188,13 +191,9 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
   }
 
   Widget _dayTile(_DaySummary d) {
-    final firstIn = d.sessions.first.entryAt;
-    final open = d.sessions.any((s) => s.isOpen);
-    final lastOut = open
-        ? null
-        : d.sessions
-            .map((s) => s.exitAt!)
-            .reduce((a, b) => a.isAfter(b) ? a : b);
+    final firstIn = d.trackFirst;
+    final open = d.anyOpen;
+    final lastOut = open ? null : d.lastEffExit;
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: ExpansionTile(
@@ -244,46 +243,52 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
           '${d.sessions.length > 1 ? '  •  ${d.sessions.length} sessions' : ''}',
           style: const TextStyle(color: AppTheme.muted, fontSize: 12.5),
         ),
-        children: d.sessions
-            .map(
-              (s) => ListTile(
-                dense: true,
-                leading: Icon(
-                  s.isOpen ? Icons.login : Icons.logout,
-                  size: 18,
-                  color: s.isOpen ? AppTheme.income : AppTheme.muted,
-                ),
-                title: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        '${_time.format(s.entryAt)}  →  '
-                        '${s.isOpen ? 'still in' : _time.format(s.exitAt!)}',
-                        style: const TextStyle(fontSize: 13.5),
-                      ),
-                    ),
-                    if (s.isManual)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFFF3E0),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Text('Manual',
-                            style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFFE65100))),
-                      ),
-                  ],
-                ),
-                trailing: Text(_fmtDur(s.duration),
-                    style: const TextStyle(
-                        color: AppTheme.muted, fontWeight: FontWeight.w600)),
+        children: d.sessions.map(
+          (s) {
+            final eff = d.effExit(s);
+            final isOpenNow = eff == null;
+            final autoClosed = s.isOpen && eff != null;
+            final dur = (eff ?? DateTime.now()).difference(s.entryAt);
+            return ListTile(
+              dense: true,
+              leading: Icon(
+                isOpenNow ? Icons.login : Icons.logout,
+                size: 18,
+                color: isOpenNow ? AppTheme.income : AppTheme.muted,
               ),
-            )
-            .toList(),
+              title: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${_time.format(s.entryAt)}  →  '
+                      '${isOpenNow ? 'still in' : _time.format(eff)}'
+                      '${autoClosed ? ' (auto)' : ''}',
+                      style: const TextStyle(fontSize: 13.5),
+                    ),
+                  ),
+                  if (s.isManual)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF3E0),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Text('Manual',
+                          style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFFE65100))),
+                    ),
+                ],
+              ),
+              trailing: Text(
+                  _fmtDur(dur.isNegative ? Duration.zero : dur),
+                  style: const TextStyle(
+                      color: AppTheme.muted, fontWeight: FontWeight.w600)),
+            );
+          },
+        ).toList(),
       ),
     );
   }
@@ -294,16 +299,63 @@ class _DaySummary {
   final List<AttendanceSession> sessions;
   _DaySummary({required this.day, required this.sessions});
 
-  /// Working hours: pehli entry se akhri exit tak ka span — beech mein
-  /// employee kitni baar bhi bahir jaye, wo time bhi count hota hai
-  /// (Talal ka rule, 2026-10-20). Sessions ki tafseel alag dikhti hai.
+  List<AttendanceSession> get wifiSessions =>
+      sessions.where((s) => !s.isManual).toList();
+
+  /// The track whose span counts as working hours: the WiFi track
+  /// whenever the day has any WiFi sessions (Talal's rule,
+  /// 2026-10-21) — manual entries never stretch the day. A
+  /// manual-only day falls back to the manual span.
+  List<AttendanceSession> get track =>
+      wifiSessions.isNotEmpty ? wifiSessions : sessions;
+
+  DateTime get trackFirst => track.first.entryAt;
+
+  DateTime? get lastWifiExit {
+    DateTime? last;
+    for (final s in wifiSessions) {
+      final e = s.exitAt;
+      if (e != null && (last == null || e.isAfter(last))) last = e;
+    }
+    return last;
+  }
+
+  /// A session's effective exit, for display and totals. Its real
+  /// exit wins. An OPEN MANUAL session counts as closed at the
+  /// day's last WiFi exit when that exit is after the manual
+  /// entry — jab aakhri WiFi exit ho jaye to manual bhi band
+  /// (Talal, 2026-10-21). Anything else open is genuinely open.
+  DateTime? effExit(AttendanceSession s) {
+    if (s.exitAt != null) return s.exitAt;
+    if (s.isManual) {
+      final lw = lastWifiExit;
+      if (lw != null && lw.isAfter(s.entryAt)) return lw;
+    }
+    return null;
+  }
+
+  bool get anyOpen => sessions.any((s) => effExit(s) == null);
+
+  DateTime? get lastEffExit {
+    DateTime? last;
+    for (final s in sessions) {
+      final e = effExit(s);
+      if (e != null && (last == null || e.isAfter(last))) last = e;
+    }
+    return last;
+  }
+
+  /// Working hours: the counting track's span — first entry to
+  /// last exit, beech ka waqt bhi shamil (Talal ka rule,
+  /// 2026-10-20/21).
   Duration get total {
-    final first = sessions.first.entryAt;
-    final end = sessions.any((s) => s.isOpen)
+    final first = trackFirst;
+    final end = track.any((s) => effExit(s) == null)
         ? DateTime.now()
-        : sessions
-            .map((s) => s.exitAt!)
+        : track
+            .map((s) => effExit(s)!)
             .reduce((a, b) => a.isAfter(b) ? a : b);
-    return end.difference(first);
+    final dur = end.difference(first);
+    return dur.isNegative ? Duration.zero : dur;
   }
 }
