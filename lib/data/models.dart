@@ -340,6 +340,7 @@ class AttendanceSession {
   final DateTime? exitAt; // null = still in office
   final String ssid;
   final String bssid;
+  final String source; // 'wifi' (auto) | 'manual' (Mark Attendance)
 
   AttendanceSession({
     required this.id,
@@ -348,9 +349,13 @@ class AttendanceSession {
     this.exitAt,
     this.ssid = '',
     this.bssid = '',
+    this.source = 'wifi',
   });
 
   bool get isOpen => exitAt == null;
+
+  /// Marked by hand from the attendance app (not via office WiFi).
+  bool get isManual => source == 'manual';
 
   /// Time spent in office for this session (open session counts till now).
   Duration get duration => (exitAt ?? DateTime.now()).difference(entryAt);
@@ -363,5 +368,6 @@ class AttendanceSession {
         exitAt: m['exit_at'] != null ? _dt(m['exit_at']) : null,
         ssid: (m['ssid'] ?? '') as String,
         bssid: (m['bssid'] ?? '') as String,
+        source: (m['source'] ?? 'wifi') as String,
       );
 }

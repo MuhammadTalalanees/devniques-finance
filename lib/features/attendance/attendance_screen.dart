@@ -76,8 +76,9 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16),
             child: Text(
-              'Attendance is recorded automatically via office WiFi. '
-              'Records cannot be edited or deleted.',
+              'Attendance is recorded automatically via office WiFi, '
+              'or marked manually from the attendance app (Manual '
+              'badge). Records cannot be edited or deleted.',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 12, color: AppTheme.muted),
             ),
@@ -218,6 +219,22 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
                         color: AppTheme.income,
                         fontWeight: FontWeight.w700)),
               ),
+            if (d.sessions.any((s) => s.isManual)) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF3E0),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Text('Manual',
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: Color(0xFFE65100),
+                        fontWeight: FontWeight.w700)),
+              ),
+            ],
           ],
         ),
         subtitle: Text(
@@ -236,10 +253,30 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
                   size: 18,
                   color: s.isOpen ? AppTheme.income : AppTheme.muted,
                 ),
-                title: Text(
-                  '${_time.format(s.entryAt)}  →  '
-                  '${s.isOpen ? 'still in' : _time.format(s.exitAt!)}',
-                  style: const TextStyle(fontSize: 13.5),
+                title: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${_time.format(s.entryAt)}  →  '
+                        '${s.isOpen ? 'still in' : _time.format(s.exitAt!)}',
+                        style: const TextStyle(fontSize: 13.5),
+                      ),
+                    ),
+                    if (s.isManual)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFF3E0),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Text('Manual',
+                            style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFFE65100))),
+                      ),
+                  ],
                 ),
                 trailing: Text(_fmtDur(s.duration),
                     style: const TextStyle(
