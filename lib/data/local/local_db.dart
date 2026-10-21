@@ -28,7 +28,7 @@ class LocalDb {
     }
     _db = await openDatabase(
       path,
-      version: 5,
+      version: 6,
       onCreate: _create,
       onUpgrade: _upgrade,
     );
@@ -60,6 +60,11 @@ class LocalDb {
       await db.execute(
           "ALTER TABLE petty_cash ADD COLUMN txn_id TEXT");
     }
+    if (oldV < 6) {
+      // v6: investor share % of Total Raised Capital (home Investors panel).
+      await db.execute(
+          "ALTER TABLE parties ADD COLUMN share_percent REAL");
+    }
   }
 
   Future<void> _create(Database db, int version) async {
@@ -75,7 +80,8 @@ class LocalDb {
       CREATE TABLE parties(
         id TEXT PRIMARY KEY, name TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'other',
         phone TEXT NOT NULL DEFAULT '', email TEXT NOT NULL DEFAULT '',
-        notes TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL)''');
+        notes TEXT NOT NULL DEFAULT '', share_percent REAL,
+        updated_at TEXT NOT NULL)''');
     await db.execute('''
       CREATE TABLE txns(
         id TEXT PRIMARY KEY, type TEXT NOT NULL, amount REAL NOT NULL,

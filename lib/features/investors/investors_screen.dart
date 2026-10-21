@@ -17,12 +17,12 @@ class InvestorsScreen extends ConsumerWidget {
     final profile = ref.watch(profileProvider);
     final isAdmin =
         profile.whenData((p) => p?.isAdmin ?? false).value ?? false;
-    final canAdd =
-        profile.whenData((p) => p?.canAdd ?? false).value ?? false;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Investors')),
-      floatingActionButton: canAdd
+      // Talal's rule: investors are ADMIN ONLY — add-only users
+      // cannot add here either.
+      floatingActionButton: isAdmin
           ? FloatingActionButton(
               onPressed: () => _showForm(context, ref, null),
               child: const Icon(Icons.add),
@@ -74,9 +74,12 @@ class InvestorsScreen extends ConsumerWidget {
                         color: AppTheme.investment),
                   ),
                   title: Text(p.name),
-                  subtitle: Text(p.phone.isEmpty
-                      ? 'Investor'
-                      : 'Investor · ${p.phone}'),
+                  subtitle: Text([
+                    'Investor',
+                    if (p.sharePercent != null)
+                      '${p.sharePercent}% share',
+                    if (p.phone.isNotEmpty) p.phone,
+                  ].join(' · ')),
                   trailing: isAdmin
                       ? Row(
                           mainAxisSize: MainAxisSize.min,
@@ -139,6 +142,10 @@ class InvestorsScreen extends ConsumerWidget {
         TextEditingController(text: existing?.name ?? '');
     final phoneCtrl =
         TextEditingController(text: existing?.phone ?? '');
+    final pctCtrl = TextEditingController(
+        text: existing?.sharePercent != null
+            ? '${existing!.sharePercent}'
+            : '');
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
@@ -153,6 +160,15 @@ class InvestorsScreen extends ConsumerWidget {
               decoration: const InputDecoration(
                   labelText: 'Investor name'),
               autofocus: true,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: pctCtrl,
+              decoration: const InputDecoration(
+                  labelText: 'Share % of Total Raised Capital',
+                  suffixText: '%'),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
             ),
             const SizedBox(height: 12),
             TextField(
@@ -171,6 +187,10 @@ class InvestorsScreen extends ConsumerWidget {
             onPressed: () async {
               final name = nameCtrl.text.trim();
               if (name.isEmpty) return;
+              final pctText = pctCtrl.text.trim();
+              final pct = pctText.isEmpty
+                  ? null
+                  : double.tryParse(pctText);
               final now = DateTime.now();
               final party = Party(
                 id: existing?.id ??
@@ -178,6 +198,9 @@ class InvestorsScreen extends ConsumerWidget {
                 name: name,
                 kind: 'investor',
                 phone: phoneCtrl.text.trim(),
+                email: existing?.email ?? '',
+                notes: existing?.notes ?? '',
+                sharePercent: pct,
                 updatedAt: now,
               );
               final repo = ref.read(partyRepoProvider);

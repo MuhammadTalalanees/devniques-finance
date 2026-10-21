@@ -92,6 +92,11 @@ class Party {
   final String phone;
   final String email;
   final String notes;
+
+  /// Investor share of Total Raised Capital, in percent (e.g. 30 =
+  /// 30%). Only meaningful for kind = 'investor'. The amount shown
+  /// in the app is calculated live: sharePercent% of raised capital.
+  final double? sharePercent;
   final DateTime updatedAt;
 
   Party({
@@ -101,6 +106,7 @@ class Party {
     this.phone = '',
     this.email = '',
     this.notes = '',
+    this.sharePercent,
     required this.updatedAt,
   });
 
@@ -111,6 +117,7 @@ class Party {
         phone: (m['phone'] ?? '') as String,
         email: (m['email'] ?? '') as String,
         notes: (m['notes'] ?? '') as String,
+        sharePercent: (m['share_percent'] as num?)?.toDouble(),
         updatedAt: m['updated_at'] != null
             ? _dt(m['updated_at'])
             : DateTime.fromMillisecondsSinceEpoch(0),
@@ -123,6 +130,7 @@ class Party {
         'phone': phone,
         'email': email,
         'notes': notes,
+        'share_percent': sharePercent,
         'updated_at': _iso(updatedAt),
       };
 }

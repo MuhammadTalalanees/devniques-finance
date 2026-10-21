@@ -14,8 +14,21 @@ import '../transactions/txn_form_screen.dart';
 /// Net Balance / Raised Capital / Operational Expenses / Cash Runway,
 /// ledger table, cash-velocity trend, expense allocation, category totals,
 /// top-10 expenses and the investors portfolio.
-class DashboardScreen extends ConsumerWidget {
+class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
+
+  @override
+  ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends ConsumerState<DashboardScreen> {
+  final _scroll = ScrollController();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
 
   static String _roleLabel(String role) {
     switch (role) {
@@ -31,7 +44,7 @@ class DashboardScreen extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final txns = ref.watch(txnListProvider);
     final profile = ref.watch(profileProvider);
     final sync = ref.watch(syncProvider);
@@ -42,7 +55,40 @@ class DashboardScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Devniques Finance'),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Title is a button too: tap = back to the top of Home.
+            InkWell(
+              onTap: () {
+                if (_scroll.hasClients) {
+                  _scroll.animateTo(0,
+                      duration: const Duration(milliseconds: 400),
+                      curve: Curves.easeOut);
+                }
+              },
+              child: const Text('Devniques Finance'),
+            ),
+            const SizedBox(width: 10),
+            // Human Resources button — opens the HR page (attendance
+            // of everyone; the home page no longer carries it).
+            OutlinedButton.icon(
+              icon: const Icon(Icons.groups, size: 18),
+              label: Text(MediaQuery.of(context).size.width > 700
+                  ? 'Human Resources (HR)'
+                  : 'HR'),
+              style: OutlinedButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              ),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                    builder: (_) => const AttendanceScreen()),
+              ),
+            ),
+          ],
+        ),
         actions: [
           if (sync.pending > 0)
             Padding(
@@ -72,6 +118,7 @@ class DashboardScreen extends ConsumerWidget {
           onRefresh: () =>
               ref.read(syncProvider.notifier).syncNow(),
           child: ListView(
+            controller: _scroll,
             padding: const EdgeInsets.all(16),
             children: [
               profile.when(
@@ -94,7 +141,32 @@ class DashboardScreen extends ConsumerWidget {
               const SizedBox(height: 16),
               _ProfitsSection(txns: list),
               const SizedBox(height: 16),
-              _LedgerCard(txns: list, isAdmin: isAdmin),
+              // Ledger + Investors side by side on wide screens
+              // (the space beside the ledger), stacked on phones.
+              LayoutBuilder(
+                builder: (context, c) {
+                  final ledger = _LedgerCard(txns: list, isAdmin: isAdmin);
+                  final investors =
+                      _InvestorsPanel(txns: list, isAdmin: isAdmin);
+                  if (c.maxWidth > 1000) {
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(flex: 3, child: ledger),
+                        const SizedBox(width: 16),
+                        Expanded(flex: 2, child: investors),
+                      ],
+                    );
+                  }
+                  return Column(
+                    children: [
+                      ledger,
+                      const SizedBox(height: 16),
+                      investors,
+                    ],
+                  );
+                },
+              ),
               const SizedBox(height: 16),
               _CashSection(txns: list),
               const SizedBox(height: 16),
@@ -109,8 +181,6 @@ class DashboardScreen extends ConsumerWidget {
               _InvestorPortfolio(txns: list),
               const SizedBox(height: 16),
               const _PettyCashSummary(),
-              const SizedBox(height: 16),
-              const _AttendanceCard(),
               const SizedBox(height: 80),
             ],
           ),
@@ -1296,60 +1366,251 @@ class _PettyCashSummary extends ConsumerWidget {
   }
 }
 
+/// Home-page Investors panel — beside the Ledger on wide screens,
+/// below it on phones. Investors are parties (kind = 'investor')
+/// merged with names found on investment entries (same merge as the
+/// More -> Investors screen, so nobody ever vanishes).
+///
+/// The admin enters each investor's share % of Total Raised
+/// Capital; the amount is calculated live from that %. Add / Edit /
+/// Delete are ADMIN ONLY here (add-only users cannot add).
+class _InvestorsPanel extends ConsumerWidget {
+  final List<Txn> txns;
+  final bool isAdmin;
+  const _InvestorsPanel({required this.txns, required this.isAdmin});
 
-/// Compact home-page entry point for Attendance (migration v7).
-/// Admin ko dikhta hai abhi kitne log office mein hain; employee ko
-/// apni aaj ki status. Tap -> monthly Attendance list.
-class _AttendanceCard extends ConsumerWidget {
-  const _AttendanceCard();
+  static String _fmtPct(double v) {
+    var s = v.toStringAsFixed(2);
+    if (s.contains('.')) {
+      s = s.replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '');
+    }
+    return s;
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final profile = ref.watch(profileProvider);
-    final isAdmin =
-        profile.whenData((p) => p?.isAdmin ?? false).value ?? false;
-    final myId = profile.whenData((p) => p?.id).value;
-    final monthAsync =
-        ref.watch(attendanceMonthProvider(firstOfMonth(DateTime.now())));
-
-    String subtitle = 'Monthly attendance list';
-    monthAsync.whenData((sessions) {
-      final now = DateTime.now();
-      final today = sessions.where((s) =>
-          s.entryAt.year == now.year &&
-          s.entryAt.month == now.month &&
-          s.entryAt.day == now.day);
-      if (isAdmin) {
-        final present = today.where((s) => s.isOpen).length;
-        subtitle = present > 0
-            ? '$present ${present == 1 ? 'person is' : 'people are'} in the office right now — monthly list'
-            : 'Monthly attendance list';
-      } else {
-        final mine = today.where((s) => s.userId == myId).toList();
-        final open = mine.where((s) => s.isOpen).firstOrNull;
-        if (open != null) {
-          subtitle = 'You are in the office — In '
-              '${open.entryAt.hour.toString().padLeft(2, '0')}:'
-              '${open.entryAt.minute.toString().padLeft(2, '0')}';
-        } else if (mine.isNotEmpty) {
-          subtitle = "Today's attendance is marked — monthly list";
-        }
-      }
-    });
+    final parties = ref.watch(partyListProvider);
+    // Total Raised Capital — the same formula as the KPI grid:
+    // every inflow that ever came in.
+    final raised =
+        txns.where((t) => t.isInflow).fold(0.0, (a, t) => a + t.amount);
 
     return Card(
-      child: ListTile(
-        leading: const CircleAvatar(
-          backgroundColor: AppTheme.primary,
-          child: Icon(Icons.fingerprint, color: Colors.white, size: 20),
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Text('Investors',
+                    style:
+                        TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                const Spacer(),
+                if (isAdmin)
+                  IconButton(
+                    icon: const Icon(Icons.add_circle_outline),
+                    tooltip: 'Add investor',
+                    onPressed: () => _showForm(context, ref, null),
+                  ),
+              ],
+            ),
+            parties.when(
+              loading: () => const Padding(
+                padding: EdgeInsets.all(16),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+              error: (e, _) => Padding(
+                padding: const EdgeInsets.all(8),
+                child: Text('Error: $e'),
+              ),
+              data: (list) {
+                final investors =
+                    list.where((p) => p.kind == 'investor').toList();
+                final existing = investors.map((p) => p.name).toSet();
+                final names = <String>{};
+                for (final t in txns.where((t) => t.isInvestment)) {
+                  if (t.investor.isNotEmpty) names.add(t.investor);
+                }
+                for (final name in names) {
+                  if (!existing.contains(name)) {
+                    investors.add(Party(
+                      id: 'txn-$name',
+                      name: name,
+                      kind: 'investor',
+                      phone: '',
+                      updatedAt: DateTime.now(),
+                    ));
+                  }
+                }
+                if (investors.isEmpty) {
+                  return const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: Text('No investors yet.',
+                        style:
+                            TextStyle(fontSize: 13, color: AppTheme.muted)),
+                  );
+                }
+                return Column(
+                  children: [
+                    for (final p in investors)
+                      _investorRow(context, ref, p, raised),
+                  ],
+                );
+              },
+            ),
+          ],
         ),
-        title: const Text('Attendance',
-            style: TextStyle(fontWeight: FontWeight.w700)),
-        subtitle: Text(subtitle),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const AttendanceScreen()),
+      ),
+    );
+  }
+
+  Widget _investorRow(
+      BuildContext context, WidgetRef ref, Party p, double raised) {
+    final pct = p.sharePercent;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            radius: 16,
+            backgroundColor: AppTheme.investment.withValues(alpha: 0.15),
+            child:
+                Icon(Icons.savings, size: 16, color: AppTheme.investment),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(p.name,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w600, fontSize: 14)),
+                const SizedBox(height: 2),
+                Text(
+                  pct != null
+                      ? '${_fmtPct(pct)}%  ·  ${fmtMoney(raised * pct / 100)}'
+                      : 'Share % not set',
+                  style:
+                      const TextStyle(color: AppTheme.muted, fontSize: 12.5),
+                ),
+              ],
+            ),
+          ),
+          if (isAdmin) ...[
+            IconButton(
+              icon: const Icon(Icons.edit, size: 19),
+              color: AppTheme.primary,
+              visualDensity: VisualDensity.compact,
+              onPressed: () => _showForm(context, ref, p),
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete, size: 19),
+              color: Colors.redAccent,
+              visualDensity: VisualDensity.compact,
+              onPressed: () => _confirmDelete(context, ref, p),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmDelete(
+      BuildContext context, WidgetRef ref, Party p) async {
+    final confirm = await showDialog<bool>(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: const Text('Delete investor?'),
+            content: Text('Remove "${p.name}" from investors?'),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Cancel')),
+              FilledButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('Delete')),
+            ],
+          ),
+        ) ??
+        false;
+    if (confirm) {
+      await ref.read(partyRepoProvider).remove(p.id);
+    }
+  }
+
+  void _showForm(BuildContext context, WidgetRef ref, Party? existing) {
+    final nameCtrl = TextEditingController(text: existing?.name ?? '');
+    final phoneCtrl = TextEditingController(text: existing?.phone ?? '');
+    final pctCtrl = TextEditingController(
+        text: existing?.sharePercent != null
+            ? _fmtPct(existing!.sharePercent!)
+            : '');
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(existing == null ? 'Add Investor' : 'Edit Investor'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameCtrl,
+              decoration:
+                  const InputDecoration(labelText: 'Investor name'),
+              autofocus: true,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: pctCtrl,
+              decoration: const InputDecoration(
+                  labelText: 'Share % of Total Raised Capital',
+                  suffixText: '%'),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: phoneCtrl,
+              decoration:
+                  const InputDecoration(labelText: 'Phone (optional)'),
+              keyboardType: TextInputType.phone,
+            ),
+          ],
         ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () async {
+              final name = nameCtrl.text.trim();
+              if (name.isEmpty) return;
+              final pctText = pctCtrl.text.trim();
+              final pct = pctText.isEmpty ? null : double.tryParse(pctText);
+              final now = DateTime.now();
+              final party = Party(
+                id: existing?.id ?? '${now.millisecondsSinceEpoch}',
+                name: name,
+                kind: 'investor',
+                phone: phoneCtrl.text.trim(),
+                email: existing?.email ?? '',
+                notes: existing?.notes ?? '',
+                sharePercent: pct,
+                updatedAt: now,
+              );
+              final repo = ref.read(partyRepoProvider);
+              if (existing == null) {
+                await repo.add(party);
+              } else {
+                await repo.update(party);
+              }
+              if (context.mounted) Navigator.pop(context);
+            },
+            child: const Text('Save'),
+          ),
+        ],
       ),
     );
   }

@@ -46,7 +46,7 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
         _month.year < now.year || (_month.year == now.year && _month.month < now.month);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Attendance')),
+      appBar: AppBar(title: const Text('Human Resources (HR)')),
       body: Column(
         children: [
           // ---- month selector ----

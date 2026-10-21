@@ -204,7 +204,10 @@ class SyncNotifier extends Notifier<SyncState> {
   static const _localCols = {
     'profiles': {'id', 'email', 'name', 'role', 'updated_at'},
     'categories': {'id', 'name', 'type', 'color', 'updated_at'},
-    'parties': {'id', 'name', 'kind', 'phone', 'email', 'notes', 'updated_at'},
+    'parties': {
+      'id', 'name', 'kind', 'phone', 'email', 'notes', 'share_percent',
+      'updated_at'
+    },
     'transactions': {
       'id', 'type', 'amount', 'category_id', 'party_id', 'investor', 'date',
       'description', 'payment_method', 'receipt_url', 'created_by',
