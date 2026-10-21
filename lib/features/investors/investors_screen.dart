@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/models.dart';
 import '../../data/repos.dart';
+import '../../core/formatters.dart';
 import '../../core/theme.dart';
 
 /// Investors: manage investor names for investment entries.
@@ -110,15 +111,30 @@ class InvestorsScreen extends ConsumerWidget {
     );
   }
 
+  /// What deleting this investor will remove, in plain words.
+  String _deleteWarning(List<Txn> txns, Party p) {
+    final f = p.name.trim().toLowerCase();
+    final mine = txns
+        .where((t) =>
+            t.isInvestment && t.investor.trim().toLowerCase() == f)
+        .toList();
+    if (mine.isEmpty) {
+      return 'Remove "${p.name}" from investors?';
+    }
+    final total = mine.fold(0.0, (a, t) => a + t.amount);
+    return 'Remove "${p.name}" from investors? His ${mine.length} '
+        'investment entries (${fmtMoney(total)}) will also be '
+        'deleted from the ledger. This cannot be undone.';
+  }
+
   Future<void> _confirmDelete(
       BuildContext context, WidgetRef ref, Party p) async {
     final confirm = await showDialog<bool>(
           context: context,
           builder: (_) => AlertDialog(
             title: const Text('Delete investor?'),
-            content: Text('Remove "${p.name}" from investors? '
-                'His ledger entries stay — only the investor name '
-                'is removed from them.'),
+            content: Text(_deleteWarning(
+                ref.read(txnListProvider).value ?? [], p)),
             actions: [
               TextButton(
                   onPressed: () =>

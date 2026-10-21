@@ -173,8 +173,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               const SizedBox(height: 16),
               _TopExpenses(txns: list),
               const SizedBox(height: 16),
-              _InvestorPortfolio(txns: list),
-              const SizedBox(height: 16),
               const _PettyCashSummary(),
               const SizedBox(height: 80),
             ],
@@ -1037,55 +1035,6 @@ class _TopExpenses extends StatelessWidget {
   }
 }
 
-class _InvestorPortfolio extends StatelessWidget {
-  final List<Txn> txns;
-  const _InvestorPortfolio({required this.txns});
-
-  @override
-  Widget build(BuildContext context) {
-    final byInv = <String, double>{};
-    for (final t in txns.where((t) => t.isInvestment)) {
-      final k = t.investor.isEmpty ? 'Unknown' : t.investor;
-      byInv[k] = (byInv[k] ?? 0) + t.amount;
-    }
-    final entries = byInv.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Investors Portfolio',
-                style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                    color: AppTheme.investment)),
-            const SizedBox(height: 8),
-            if (entries.isEmpty)
-              const Text('No investments recorded yet.',
-                  style: TextStyle(fontSize: 13)),
-            for (final e in entries)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(children: [
-                  Expanded(
-                      child: Text(e.key,
-                          style: const TextStyle(fontSize: 13))),
-                  Text(fmtMoney(e.value),
-                      style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: AppTheme.investment)),
-                ]),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 /// Profits section on the home page: total profit + monthly breakdown.
 class _ProfitsSection extends StatelessWidget {
   final List<Txn> txns;
@@ -1467,6 +1416,22 @@ class _InvestorsPanel extends ConsumerWidget {
     );
   }
 
+  /// What deleting this investor will remove, in plain words.
+  String _deleteWarning(Party p) {
+    final f = p.name.trim().toLowerCase();
+    final mine = txns
+        .where((t) =>
+            t.isInvestment && t.investor.trim().toLowerCase() == f)
+        .toList();
+    if (mine.isEmpty) {
+      return 'Remove "${p.name}" from investors?';
+    }
+    final total = mine.fold(0.0, (a, t) => a + t.amount);
+    return 'Remove "${p.name}" from investors? His ${mine.length} '
+        'investment entries (${fmtMoney(total)}) will also be '
+        'deleted from the ledger. This cannot be undone.';
+  }
+
   /// What this investor has actually put in so far (sum of their
   /// investment entries) — shown until the admin sets a share %.
   double _investedOf(String name) {
@@ -1535,9 +1500,7 @@ class _InvestorsPanel extends ConsumerWidget {
           context: context,
           builder: (_) => AlertDialog(
             title: const Text('Delete investor?'),
-            content: Text('Remove "${p.name}" from investors? '
-                'His ledger entries stay — only the investor name '
-                'is removed from them.'),
+            content: Text(_deleteWarning(p)),
             actions: [
               TextButton(
                   onPressed: () => Navigator.pop(context, false),

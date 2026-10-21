@@ -508,16 +508,23 @@ class PartyRepo {
     }
   }
 
-  /// Deletes an investor so it stays deleted: removes the party
-  /// record (when there is one) AND clears the investor name from
-  /// their entries — the entries themselves stay in the ledger.
-  /// Without the second step a name-only investor would simply
-  /// reappear from its entries.
+  /// Deletes an investor completely (Talal's rule, 2026-10-21):
+  /// removes the party record (when there is one) AND deletes
+  /// their investment entries from the ledger — delete means the
+  /// investor and his money lines are gone everywhere, and the
+  /// totals adjust. The confirm dialog states this before it runs.
   Future<void> removeInvestor(Party p, List<Txn> txns) async {
     if (!p.id.startsWith('txn-')) {
       await remove(p.id);
     }
-    await _retagInvestor(txns, p.name, '');
+    final f = p.name.trim().toLowerCase();
+    if (f.isEmpty) return;
+    final repo = _ref.read(txnRepoProvider);
+    for (final t in txns) {
+      if (t.isInvestment && t.investor.trim().toLowerCase() == f) {
+        await repo.remove(t.id);
+      }
+    }
   }
 
   Future<void> _retagInvestor(
