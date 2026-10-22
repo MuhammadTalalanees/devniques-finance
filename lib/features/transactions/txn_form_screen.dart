@@ -187,6 +187,8 @@ class _TxnFormScreenState extends ConsumerState<TxnFormScreen> {
           updatedAt: now,
           kind: 'fund',
           txnId: txn.id,
+          categoryId: txn.categoryId,
+          categoryName: txn.categoryName,
         );
         await pettyRepo.add(pettyEntry);
         if (mounted) Navigator.of(context).pop();
@@ -236,6 +238,8 @@ class _TxnFormScreenState extends ConsumerState<TxnFormScreen> {
             updatedAt: now,
             kind: 'fund',
             txnId: existing.id,
+            categoryId: existing.categoryId,
+            categoryName: existing.categoryName,
           );
           await pettyRepo.update(updated);
         }
@@ -256,6 +260,8 @@ class _TxnFormScreenState extends ConsumerState<TxnFormScreen> {
           createdBy: profile.id,
           updatedAt: now,
           kind: 'spend',
+          categoryId: _categoryId,
+          categoryName: cat.isNotEmpty ? cat.first.name : '',
         );
         await pettyRepo.add(pettyEntry);
         if (mounted) Navigator.of(context).pop();

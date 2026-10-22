@@ -28,7 +28,7 @@ class LocalDb {
     }
     _db = await openDatabase(
       path,
-      version: 6,
+      version: 7,
       onCreate: _create,
       onUpgrade: _upgrade,
     );
@@ -65,6 +65,13 @@ class LocalDb {
       await db.execute(
           "ALTER TABLE parties ADD COLUMN share_percent REAL");
     }
+    if (oldV < 7) {
+      // v7: each petty cash entry carries its own category.
+      await db.execute(
+          "ALTER TABLE petty_cash ADD COLUMN category_id TEXT");
+      await db.execute(
+          "ALTER TABLE petty_cash ADD COLUMN category_name TEXT NOT NULL DEFAULT ''");
+    }
   }
 
   Future<void> _create(Database db, int version) async {
@@ -97,7 +104,8 @@ class LocalDb {
         id TEXT PRIMARY KEY, amount REAL NOT NULL,
         description TEXT NOT NULL DEFAULT '',
         date TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'spend',
-        txn_id TEXT,
+        txn_id TEXT, category_id TEXT,
+        category_name TEXT NOT NULL DEFAULT '',
         created_by TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL)''');
     await db.execute('''
       CREATE TABLE sync_queue(

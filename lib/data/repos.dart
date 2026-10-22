@@ -215,7 +215,7 @@ class SyncNotifier extends Notifier<SyncState> {
     },
     'petty_cash': {
       'id', 'amount', 'description', 'date', 'created_by', 'updated_at',
-      'kind', 'txn_id'
+      'kind', 'txn_id', 'category_id', 'category_name'
     },
   };
 
@@ -269,6 +269,16 @@ class SyncNotifier extends Notifier<SyncState> {
             _localize(t, r)
               ..['category_name'] = r['category_name']
               ..['party_name'] = r['party_name']
+        ]);
+      } else if (t == 'petty_cash') {
+        // denormalize the category name for display
+        final cats = {
+          for (final c in await db.getAll('categories')) c['id']: c['name']
+        };
+        await db.upsertAll(local, [
+          for (final r in rows)
+            _localize(t, r)
+              ..['category_name'] = cats[r['category_id']] ?? ''
         ]);
       } else {
         await db.upsertAll(local, [for (final r in rows) _localize(t, r)]);

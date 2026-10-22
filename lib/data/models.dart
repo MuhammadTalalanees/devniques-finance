@@ -275,6 +275,11 @@ class PettyCash {
   /// Links a 'fund' entry to its main-ledger transaction (for cascade delete).
   final String? txnId;
 
+  /// The entry's own category — chosen in the entry form (for a
+  /// fund it mirrors the linked ledger transaction's category).
+  final String? categoryId;
+  final String categoryName;
+
   PettyCash({
     required this.id,
     required this.amount,
@@ -284,6 +289,8 @@ class PettyCash {
     required this.updatedAt,
     this.kind = 'spend',
     this.txnId,
+    this.categoryId,
+    this.categoryName = '',
   });
 
   bool get isFund => kind == 'fund';
@@ -301,6 +308,8 @@ class PettyCash {
             : DateTime.fromMillisecondsSinceEpoch(0),
         kind: (m['kind'] ?? 'spend') as String,
         txnId: m['txn_id'] as String?,
+        categoryId: m['category_id'] as String?,
+        categoryName: (m['category_name'] ?? '') as String,
       );
 
   Map<String, dynamic> toMap() {
@@ -312,22 +321,30 @@ class PettyCash {
       'created_by': createdBy,
       'updated_at': _iso(updatedAt),
       'kind': kind,
+      'category_name': categoryName,
     };
     // Only include txn_id if set (for backward compat with old local DBs)
     if (txnId != null) m['txn_id'] = txnId;
+    if (categoryId != null) m['category_id'] = categoryId;
     return m;
   }
 
-  Map<String, dynamic> toRemoteMap() => {
-        'id': id,
-        'amount': amount,
-        'description': description,
-        'date': date.toIso8601String().substring(0, 10),
-        'created_by': createdBy,
-        'updated_at': _iso(updatedAt),
-        'kind': kind,
-        'txn_id': txnId,
-      };
+  Map<String, dynamic> toRemoteMap() {
+    final m = <String, dynamic>{
+      'id': id,
+      'amount': amount,
+      'description': description,
+      'date': date.toIso8601String().substring(0, 10),
+      'created_by': createdBy,
+      'updated_at': _iso(updatedAt),
+      'kind': kind,
+      'txn_id': txnId,
+    };
+    // Sent only when set — the server column arrives with
+    // migration v12; a null category syncs exactly as before.
+    if (categoryId != null) m['category_id'] = categoryId;
+    return m;
+  }
 }
 
 /// One office visit, recorded automatically when the employee's phone

@@ -84,8 +84,9 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
               'Attendance is recorded automatically via office WiFi, '
               'or marked manually from the attendance app (Manual '
               'badge). Working hours run from the first WiFi entry '
-              'to the last WiFi exit of the day; a manual session '
-              'closes with that last WiFi exit (auto). All times '
+              'to the last WiFi exit of the day. A manual session '
+              'ends only by its own exit mark, or at midnight '
+              '(auto). All times '
               'are Pakistan time. A session still open from a '
               'previous day counts as closed at midnight (auto) — '
               'its exit was missed. Records cannot be '
@@ -340,26 +341,12 @@ class _DaySummary {
 
   DateTime get trackFirst => track.first.entryAt;
 
-  DateTime? get lastWifiExit {
-    DateTime? last;
-    for (final s in wifiSessions) {
-      final e = s.exitAt;
-      if (e != null && (last == null || e.isAfter(last))) last = e;
-    }
-    return last;
-  }
-
-  /// A session's effective exit, for display and totals. Its real
-  /// exit wins. An OPEN MANUAL session counts as closed at the
-  /// day's last WiFi exit when that exit is after the manual
-  /// entry — jab aakhri WiFi exit ho jaye to manual bhi band
-  /// (Talal, 2026-10-21). Anything else open is genuinely open.
+  /// A session's effective exit, for display and totals. Its
+  /// real exit wins. A MANUAL session is never closed by a
+  /// WiFi exit — it ends only by its own Mark exit (Talal
+  /// reversed the 2026-10-21 rule on 2026-10-22).
   DateTime? effExit(AttendanceSession s) {
     if (s.exitAt != null) return s.exitAt;
-    if (s.isManual) {
-      final lw = lastWifiExit;
-      if (lw != null && lw.isAfter(s.entryAt)) return lw;
-    }
     // A session still open from a PREVIOUS (PKT) day: the
     // exit was missed (detector off/dead), so the day counts
     // as closed at midnight — the same boundary the detector
