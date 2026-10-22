@@ -19,6 +19,7 @@ class PettyCashScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final list = ref.watch(pettyCashListProvider);
+    final txns = ref.watch(txnListProvider).value ?? const <Txn>[];
     final profile = ref.watch(profileProvider);
     final isAdmin =
         profile.whenData((p) => p?.isAdmin ?? false).value ?? false;
@@ -97,135 +98,222 @@ class PettyCashScreen extends ConsumerWidget {
               Expanded(
                 child: items.isEmpty
                     ? const Center(
-                        child: Text(
-                            'No petty cash entries yet.'))
-                    : ListView.builder(
-                        itemCount: items.length,
-                        itemBuilder: (_, i) {
-                          final p = items[i];
-                          final fund = p.isFund;
-                          return Card(
-                            margin:
-                                const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 4),
-                            child: ListTile(
-                              leading: CircleAvatar(
-                                backgroundColor:
-                                    (fund
-                                            ? AppTheme.income
-                                            : AppTheme.expense)
-                                        .withValues(alpha: 0.15),
-                                child: Icon(
-                                    fund
-                                        ? Icons.add_card
-                                        : Icons.coffee_outlined,
-                                    color: fund
-                                        ? AppTheme.income
-                                        : AppTheme.expense),
-                              ),
-                              title: Text(p.description.isEmpty
-                                  ? (fund
-                                      ? 'Funds added'
-                                      : 'Petty expense')
-                                  : p.description),
-                              subtitle: Text(
-                                  '${fund ? 'Added' : 'Spent'} · ${fmtDate(p.date)}'),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                      '${fund ? '+' : '−'} ${fmtMoney(p.amount)}',
-                                      style: TextStyle(
-                                          fontWeight:
-                                              FontWeight.bold,
-                                          color: fund
-                                              ? AppTheme.income
-                                              : AppTheme.expense)),
-                                  if (isAdmin)
-                                    Row(
-                                        mainAxisSize:
-                                            MainAxisSize.min,
-                                        children: [
-                                          IconButton(
-                                            icon: const Icon(
-                                                Icons.edit,
-                                                size: 20),
-                                            color:
-                                                AppTheme.primary,
-                                            tooltip: 'Edit',
-                                            onPressed: () =>
-                                                _editEntry(context,
-                                                    ref, p),
-                                          ),
-                                          IconButton(
-                                      icon: const Icon(
-                                          Icons.delete,
-                                          size: 20),
-                                      color: Colors.redAccent,
-                                      onPressed: () async {
-                                        final confirm =
-                                            await showDialog<
-                                                    bool>(
-                                                  context:
-                                                      context,
-                                                  builder: (_) =>
-                                                      AlertDialog(
-                                                    title: const Text(
-                                                        'Delete?'),
-                                                    content:
-                                                        const Text(
-                                                            'Remove this petty cash entry?'),
-                                                    actions: [
-                                                      TextButton(
-                                                          onPressed: () =>
-                                                              Navigator.pop(
-                                                                  context,
-                                                                  false),
-                                                          child: const Text(
-                                                              'Cancel')),
-                                                      FilledButton(
-                                                          onPressed: () =>
-                                                              Navigator.pop(
-                                                                  context,
-                                                                  true),
-                                                          child: const Text(
-                                                              'Delete')),
-                                                    ],
-                                                  ),
-                                                ) ??
-                                            false;
-                                        if (confirm) {
-                                          // Cascade delete: if this petty cash
-                                          // fund entry is linked to a ledger
-                                          // transaction, delete that too
-                                          if (p.txnId != null) {
-                                            await ref
-                                                .read(txnRepoProvider)
-                                                .remove(p.txnId!);
-                                          }
-                                          await ref
-                                              .read(
-                                                  pettyCashRepoProvider)
-                                              .remove(p.id);
-                                        }
-                                      },
-                                    ),
-                                        ],
-                                      ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-              ),
+                        child: Text('No petty cash entries yet.'))
+                    : _buildTable(context, ref, items, txns, isAdmin),
+              )
             ],
           );
         },
       ),
     );
   }
+
+  /// Ledger-style table (same layout as the main Ledger):
+  /// Date | Particulars | Category badge | Debit | Credit |
+  /// Balance | Action. Fund = Credit, Spend = Debit; Balance
+  /// is the running pot balance after that entry.
+  Widget _buildTable(BuildContext context, WidgetRef ref,
+      List<PettyCash> items, List<Txn> txns, bool isAdmin) {
+    // Running balance after each entry, computed oldest-first
+    // and attached by entry id; display stays newest-first.
+    final chronological = items.toList()
+      ..sort((a, b) {
+        final d = a.date.compareTo(b.date);
+        return d != 0 ? d : a.updatedAt.compareTo(b.updatedAt);
+      });
+    final balanceAfter = <String, double>{};
+    var run = 0.0;
+    for (final p in chronological) {
+      run += p.isFund ? p.amount : -p.amount;
+      balanceAfter[p.id] = run;
+    }
+    final txnById = {for (final t in txns) t.id: t};
+    String categoryOf(PettyCash p) {
+      if (p.isFund && p.txnId != null) {
+        final c = txnById[p.txnId!]?.categoryName ?? '';
+        if (c.isNotEmpty) return c;
+      }
+      return 'Petty Cash';
+    }
+
+    TextStyle head() => const TextStyle(
+        fontWeight: FontWeight.bold, fontSize: 12);
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: SizedBox(
+        width: isAdmin ? 730 : 630,
+        child: Column(
+          children: [
+            Container(
+              color: AppTheme.primary.withValues(alpha: 0.08),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 8, vertical: 10),
+              child: Row(
+                children: [
+                  SizedBox(width: 80, child: Text('Date', style: head())),
+                  SizedBox(
+                      width: 170,
+                      child: Text('Particulars', style: head())),
+                  SizedBox(
+                      width: 110,
+                      child: Text('Category', style: head())),
+                  SizedBox(
+                      width: 90,
+                      child: Text('Debit (Rs.)',
+                          textAlign: TextAlign.right, style: head())),
+                  SizedBox(
+                      width: 90,
+                      child: Text('Credit (Rs.)',
+                          textAlign: TextAlign.right, style: head())),
+                  SizedBox(
+                      width: 90,
+                      child: Text('Balance (Rs.)',
+                          textAlign: TextAlign.right, style: head())),
+                  if (isAdmin)
+                    SizedBox(
+                        width: 100, child: Text('Action', style: head())),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: ListView.builder(
+                itemCount: items.length,
+                itemBuilder: (_, i) => _row(context, ref, items[i],
+                    categoryOf(items[i]),
+                    balanceAfter[items[i].id] ?? 0, isAdmin),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _row(BuildContext context, WidgetRef ref, PettyCash p,
+      String category, double balance, bool isAdmin) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: const BoxDecoration(
+        border: Border(
+            bottom: BorderSide(color: Color(0x11000000), width: 1)),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+              width: 80,
+              child: Text(fmtDate(p.date),
+                  style: const TextStyle(fontSize: 12))),
+          SizedBox(
+            width: 170,
+            child: Text(
+              p.description.isEmpty
+                  ? (p.isFund ? 'Funds added' : 'Petty expense')
+                  : p.description,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 12),
+            ),
+          ),
+          SizedBox(
+            width: 110,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.grey[600],
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(category,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600)),
+              ),
+            ),
+          ),
+          SizedBox(
+              width: 90,
+              child: Text(p.isFund ? '-' : fmtMoney(p.amount),
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(fontSize: 12))),
+          SizedBox(
+              width: 90,
+              child: Text(p.isFund ? fmtMoney(p.amount) : '-',
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(fontSize: 12))),
+          SizedBox(
+              width: 90,
+              child: Text(fmtMoney(balance),
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.bold))),
+          if (isAdmin)
+            SizedBox(
+              width: 100,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFFB45309),
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(40, 32),
+                    ),
+                    onPressed: () => _editEntry(context, ref, p),
+                    child:
+                        const Text('Edit', style: TextStyle(fontSize: 12)),
+                  ),
+                  const Text('|',
+                      style:
+                          TextStyle(fontSize: 12, color: AppTheme.muted)),
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppTheme.expense,
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(48, 32),
+                    ),
+                    onPressed: () => _deleteEntry(context, ref, p),
+                    child: const Text('Delete',
+                        style: TextStyle(fontSize: 12)),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteEntry(
+      BuildContext context, WidgetRef ref, PettyCash p) async {
+    final confirm = await showDialog<bool>(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: const Text('Delete?'),
+            content: const Text('Remove this petty cash entry?'),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Cancel')),
+              FilledButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('Delete')),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirm) return;
+    // Cascade delete: if this petty cash fund entry is linked
+    // to a ledger transaction, delete that too.
+    if (p.txnId != null) {
+      await ref.read(txnRepoProvider).remove(p.txnId!);
+    }
+    await ref.read(pettyCashRepoProvider).remove(p.id);
+  }
+
 
   Future<void> _downloadCsv(WidgetRef ref) async {
     final items = await ref.read(pettyCashListProvider.future);
