@@ -458,11 +458,61 @@ final partyListProvider = FutureProvider<List<Party>>((ref) async {
   return rows.map(Party.fromMap).toList();
 });
 
+/// Thrown when an investor save would push the total of all
+/// shares past 100% (Talal's rule, 2026-10-22). The investor
+/// forms catch this, show [message] and keep the dialog open.
+class ShareLimitException implements Exception {
+  final String message;
+  ShareLimitException(this.message);
+  @override
+  String toString() => message;
+}
+
 class PartyRepo {
   PartyRepo(this._ref);
   final Ref _ref;
 
+  static String _fmtShare(double v) {
+    var x = v.toStringAsFixed(2);
+    if (x.contains('.')) {
+      x = x.replaceFirst(RegExp(r'0+$'), '')
+          .replaceFirst(RegExp(r'\.$'), '');
+    }
+    return x;
+  }
+
+  /// All investors' shares together can never pass 100%.
+  /// Returns the error text for this save, or null when it fits.
+  Future<String?> shareLimitError(Party p) async {
+    final pct = p.sharePercent;
+    if (pct == null) return null;
+    if (pct < 0 || pct > 100) {
+      return 'Share % must be between 0 and 100.';
+    }
+    final rows = await LocalDb.instance.getAll('parties');
+    var others = 0.0;
+    for (final r in rows) {
+      final q = Party.fromMap(r);
+      if (q.kind == 'investor' &&
+          q.id != p.id &&
+          q.sharePercent != null) {
+        others += q.sharePercent!;
+      }
+    }
+    if (others + pct > 100.0001) {
+      final left = 100 - others;
+      return 'Shares already total ${_fmtShare(others)}%. '
+          'Only ${_fmtShare(left)}% is left — this share can be '
+          'at most ${_fmtShare(left)}%.';
+    }
+    return null;
+  }
+
   Future<void> add(Party p) async {
+    if (p.kind == 'investor') {
+      final err = await shareLimitError(p);
+      if (err != null) throw ShareLimitException(err);
+    }
     final db = LocalDb.instance;
     await db.upsertAll('parties', [p.toMap()]);
     await db.enqueue('parties', 'insert', p.id, p.toMap());
@@ -497,6 +547,8 @@ class PartyRepo {
   /// the record changes only the record.
   Future<void> saveInvestor(Party p, List<Txn> txns,
       {String? previousName}) async {
+    final err = await shareLimitError(p);
+    if (err != null) throw ShareLimitException(err);
     if (p.id.startsWith('txn-')) {
       await add(Party(
         id: newId(),

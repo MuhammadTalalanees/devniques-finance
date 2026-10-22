@@ -215,12 +215,23 @@ class InvestorsScreen extends ConsumerWidget {
                 updatedAt: now,
               );
               final repo = ref.read(partyRepoProvider);
-              if (existing == null) {
-                await repo.add(party);
-              } else {
-                final txns = ref.read(txnListProvider).value ?? [];
-                await repo.saveInvestor(party, txns,
-                    previousName: existing.name);
+              try {
+                if (existing == null) {
+                  await repo.add(party);
+                } else {
+                  final txns = ref.read(txnListProvider).value ?? [];
+                  await repo.saveInvestor(party, txns,
+                      previousName: existing.name);
+                }
+              } on ShareLimitException catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                        content: Text(e.message),
+                        backgroundColor: Colors.redAccent),
+                  );
+                }
+                return;
               }
               if (context.mounted) Navigator.pop(context);
             },
