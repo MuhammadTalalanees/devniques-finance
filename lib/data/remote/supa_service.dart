@@ -108,4 +108,19 @@ class SupaService {
         );
     return _c.storage.from('receipts').getPublicUrl(path);
   }
+
+  /// HR files (documents / payslips): same public 'receipts'
+  /// bucket, 'hr/' folder. The returned public URL opens on
+  /// any phone browser — no sign-in needed to view the file.
+  Future<String> uploadHrFile(
+      String fileName, Uint8List bytes, String contentType) async {
+    final name = '${DateTime.now().millisecondsSinceEpoch}_$fileName';
+    final path = 'hr/$name';
+    await _c.storage.from('receipts').uploadBinary(
+          path,
+          bytes,
+          fileOptions: FileOptions(contentType: contentType),
+        );
+    return _c.storage.from('receipts').getPublicUrl(path);
+  }
 }
