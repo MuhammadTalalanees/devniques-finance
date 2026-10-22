@@ -1914,10 +1914,13 @@ class _PayslipsScreenState extends ConsumerState<PayslipsScreen> {
                     initialValue: userId,
                     decoration:
                         const InputDecoration(labelText: 'Employee'),
-                    items: _names.entries
-                        .map((e) => DropdownMenuItem(
-                            value: e.key, child: Text(e.value)))
-                        .toList(),
+                    items: [
+                      const DropdownMenuItem(
+                          value: '__all__',
+                          child: Text('All employees')),
+                      ..._names.entries.map((e) => DropdownMenuItem(
+                          value: e.key, child: Text(e.value))),
+                    ],
                     onChanged: (v) => setLocal(() => userId = v),
                   ),
                   const SizedBox(height: 12),
@@ -1965,13 +1968,33 @@ class _PayslipsScreenState extends ConsumerState<PayslipsScreen> {
         ) ??
         false;
     if (!ok || userId == null) return;
-    await ref.read(supaServiceProvider).insertRow('payslips', {
-      'user_id': userId,
-      'month':
-          '${month.year}-${month.month.toString().padLeft(2, '0')}-01',
-      'url': urlCtrl.text.trim(),
-      'breakdown': {'note': noteCtrl.text.trim()},
-    });
+    final svc = ref.read(supaServiceProvider);
+    final monthStr =
+        '${month.year}-${month.month.toString().padLeft(2, '0')}-01';
+    if (userId == '__all__') {
+      // One payslip, every employee: a row per person, so it
+      // shows in each employee's own panel.
+      for (final uid in _names.keys) {
+        await svc.insertRow('payslips', {
+          'user_id': uid,
+          'month': monthStr,
+          'url': urlCtrl.text.trim(),
+          'breakdown': {'note': noteCtrl.text.trim()},
+        });
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(
+                'Payslip sent to all ${_names.length} employees')));
+      }
+    } else {
+      await svc.insertRow('payslips', {
+        'user_id': userId,
+        'month': monthStr,
+        'url': urlCtrl.text.trim(),
+        'breakdown': {'note': noteCtrl.text.trim()},
+      });
+    }
     await _load();
   }
 
