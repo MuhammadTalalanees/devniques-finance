@@ -86,8 +86,9 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
               'badge). Working hours run from the first WiFi entry '
               'to the last WiFi exit of the day; a manual session '
               'closes with that last WiFi exit (auto). All times '
-              'are Pakistan time. A red Detector off badge marks a '
-              'day whose session never closed. Records cannot be '
+              'are Pakistan time. A session still open from a '
+              'previous day counts as closed at midnight (auto) — '
+              'its exit was missed. Records cannot be '
               'edited or deleted.',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 12, color: AppTheme.muted),
@@ -357,6 +358,18 @@ class _DaySummary {
     if (s.isManual) {
       final lw = lastWifiExit;
       if (lw != null && lw.isAfter(s.entryAt)) return lw;
+    }
+    // A session still open from a PREVIOUS (PKT) day: the
+    // exit was missed (detector off/dead), so the day counts
+    // as closed at midnight — the same boundary the detector
+    // writes in the database (Talal, 2026-10-22). Today's
+    // open sessions stay genuinely open.
+    final ep = pkt(s.entryAt);
+    final np = pkt(DateTime.now());
+    if (DateTime(ep.year, ep.month, ep.day)
+        .isBefore(DateTime(np.year, np.month, np.day))) {
+      return DateTime.utc(ep.year, ep.month, ep.day + 1)
+          .subtract(const Duration(hours: 5));
     }
     return null;
   }
