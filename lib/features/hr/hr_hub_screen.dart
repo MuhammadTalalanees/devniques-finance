@@ -149,7 +149,7 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
   Future<void> _edit(Map<String, dynamic> row) async {
     final nameCtrl =
         TextEditingController(text: (row['name'] ?? '') as String);
-    var role = (row['role'] ?? 'staff') as String;
+    var role = (row['role'] ?? 'view_only') as String;
     final ok = await showDialog<bool>(
           context: context,
           builder: (_) => AlertDialog(
@@ -169,8 +169,6 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
                   items: const [
                     DropdownMenuItem(
                         value: 'admin', child: Text('Admin')),
-                    DropdownMenuItem(
-                        value: 'staff', child: Text('Staff')),
                     DropdownMenuItem(
                         value: 'add_only', child: Text('Add only')),
                     DropdownMenuItem(
@@ -224,7 +222,7 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
                       final r = _rows[i];
                       final name = (r['name'] ?? '') as String;
                       final email = (r['email'] ?? '') as String;
-                      final role = (r['role'] ?? 'staff') as String;
+                      final role = (r['role'] ?? 'view_only') as String;
                       return Card(
                         child: ListTile(
                           leading: CircleAvatar(
@@ -244,7 +242,7 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
                           ),
                           title: Text(name.isNotEmpty ? name : email),
                           subtitle: Text(
-                              '$email\n${role == 'admin' ? 'Admin' : role}'),
+                              '$email\n${role == 'admin' ? 'Admin' : role == 'add_only' ? 'Add only' : 'View only'}'),
                           isThreeLine: true,
                           trailing: IconButton(
                             icon: const Icon(Icons.edit, size: 20),
