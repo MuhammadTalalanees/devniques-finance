@@ -314,7 +314,6 @@ class _RequestsScreenState extends ConsumerState<RequestsScreen> {
   Map<String, String> _names = {};
   bool _loading = true;
   String? _error;
-  bool _onlyPending = true;
   RealtimeChannel? _channel;
 
   bool get _isAdmin =>
@@ -809,23 +808,15 @@ class _RequestsScreenState extends ConsumerState<RequestsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final visible = _rows.where((r) {
-      if (!_isAdmin && r['user_id'] != _myId) return false;
-      if (_onlyPending && _isAdmin) return r['status'] == 'pending';
-      return true;
-    }).toList();
+    // Ledger view (Talal, 2026-10-22): every record stays
+    // visible forever — pending, approved, rejected and
+    // cancelled alike. Nothing disappears after a decision.
+    final visible = _rows
+        .where((r) => _isAdmin || r['user_id'] == _myId)
+        .toList();
     return Scaffold(
       appBar: AppBar(
         title: Text(_isAdmin ? 'Requests & Approvals' : 'My Requests'),
-        actions: [
-          if (_isAdmin)
-            TextButton(
-              onPressed: () =>
-                  setState(() => _onlyPending = !_onlyPending),
-              child: Text(_onlyPending ? 'Show all' : 'Pending only',
-                  style: const TextStyle(color: Colors.white)),
-            ),
-        ],
       ),
       floatingActionButton: _isAdmin
           ? null
