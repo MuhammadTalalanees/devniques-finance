@@ -6,7 +6,7 @@ import '../../core/formatters.dart';
 import '../../core/theme.dart';
 import '../../data/models.dart';
 import '../../data/repos.dart';
-import '../attendance/attendance_screen.dart';
+import '../hr/hr_hub_screen.dart';
 import '../petty_cash/petty_cash_screen.dart';
 import '../transactions/txn_form_screen.dart';
 
@@ -76,7 +76,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             InkWell(
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(
-                    builder: (_) => const AttendanceScreen()),
+                    builder: (_) => const HrHubScreen()),
               ),
               child: Text(MediaQuery.of(context).size.width > 700
                   ? 'Human Resources (HR)'
