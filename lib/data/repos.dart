@@ -491,13 +491,13 @@ class PartyRepo {
   /// An investor can exist in two ways: as a real party record, or
   /// name-only (id 'txn-<name>') through their investment entries.
   /// Saving a name-only investor creates the real record under a
-  /// fresh UUID. A rename (of either kind) also renames the investor
-  /// tag on their entries — otherwise the old name keeps showing as
-  /// a second investor.
+  /// fresh UUID. Talal's final model (2026-10-22): saving NEVER
+  /// touches entries — no retagging on rename. The name on an
+  /// entry is free text the admin typed on that entry; renaming
+  /// the record changes only the record.
   Future<void> saveInvestor(Party p, List<Txn> txns,
       {String? previousName}) async {
     if (p.id.startsWith('txn-')) {
-      final oldName = p.id.substring(4);
       await add(Party(
         id: newId(),
         name: p.name,
@@ -508,51 +508,21 @@ class PartyRepo {
         sharePercent: p.sharePercent,
         updatedAt: p.updatedAt,
       ));
-      if (oldName.trim().toLowerCase() !=
-          p.name.trim().toLowerCase()) {
-        await _retagInvestor(txns, oldName, p.name);
-      }
     } else {
       await update(p);
-      if (previousName != null &&
-          previousName.trim().toLowerCase() !=
-              p.name.trim().toLowerCase()) {
-        await _retagInvestor(txns, previousName, p.name);
-      }
     }
   }
 
-  /// Removes an investor (Talal's rule, 2026-10-22 — REPLACES the
-  /// 2026-10-21 delete-everything rule): ONLY the investor record
-  /// and its share % go away. The capital entries STAY in the
-  /// ledger — Total Raised Capital never decreases — they only
-  /// lose the investor name tag, so the investors panel no longer
-  /// lists this investor. The confirm dialog states this first.
+  /// Removes an investor (Talal's FINAL rule, 2026-10-22 night —
+  /// replaces every earlier variant): the Investors section is a
+  /// share register ONLY. Deleting removes ONLY the investor
+  /// record and its share %. It NEVER touches entries, Total
+  /// Raised Capital or balances — no untagging, no cascading,
+  /// nothing. A name-only investor (id 'txn-...') has no record,
+  /// so there is nothing to delete.
   Future<void> removeInvestor(Party p, List<Txn> txns) async {
     if (!p.id.startsWith('txn-')) {
       await remove(p.id);
-    }
-    final f = p.name.trim().toLowerCase();
-    if (f.isEmpty) return;
-    final repo = _ref.read(txnRepoProvider);
-    for (final t in txns) {
-      if (t.isInvestment && t.investor.trim().toLowerCase() == f) {
-        await repo.update(
-            t.copyWith(investor: '', updatedAt: DateTime.now()));
-      }
-    }
-  }
-
-  Future<void> _retagInvestor(
-      List<Txn> txns, String from, String to) async {
-    final f = from.trim().toLowerCase();
-    if (f.isEmpty) return;
-    final repo = _ref.read(txnRepoProvider);
-    for (final t in txns) {
-      if (t.isInvestment && t.investor.trim().toLowerCase() == f) {
-        await repo.update(
-            t.copyWith(investor: to, updatedAt: DateTime.now()));
-      }
     }
   }
 }

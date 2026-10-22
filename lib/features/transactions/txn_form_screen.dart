@@ -27,9 +27,9 @@ class _TxnFormScreenState extends ConsumerState<TxnFormScreen> {
   final _amount = TextEditingController();
   final _desc = TextEditingController();
   final _docUrl = TextEditingController();
+  final _investorCtrl = TextEditingController();
   String? _categoryId;
   String? _partyId;
-  String? _investorName; // selected investor name for investments
   DateTime _date = DateTime.now();
   String _method = 'Cash';
   String? _receiptLocal;
@@ -66,7 +66,7 @@ class _TxnFormScreenState extends ConsumerState<TxnFormScreen> {
     if (e != null) {
       _amount.text = e.amount.toStringAsFixed(2);
       _desc.text = e.description;
-      _investorName = e.investor.isEmpty ? null : e.investor;
+      _investorCtrl.text = e.investor;
       _docUrl.text = e.receiptUrl ?? '';
       _categoryId = e.categoryId;
       _partyId = e.partyId;
@@ -101,8 +101,8 @@ class _TxnFormScreenState extends ConsumerState<TxnFormScreen> {
       _snack('Not signed in');
       return;
     }
-    if (_type == 'investment' && (_investorName == null || _investorName!.isEmpty)) {
-      _snack('Select the investor');
+    if (_type == 'investment' && _investorCtrl.text.trim().isEmpty) {
+      _snack('Enter the investor name');
       return;
     }
     setState(() => _busy = true);
@@ -280,7 +280,7 @@ class _TxnFormScreenState extends ConsumerState<TxnFormScreen> {
             : (_type == 'profit' ? 'Profit' : ''),
         partyId: _partyId,
         partyName: party.isEmpty ? '' : party.first.name,
-        investor: _type == 'investment' ? (_investorName ?? '') : '',
+        investor: _type == 'investment' ? _investorCtrl.text.trim() : '',
         date: _date,
         description: _desc.text.trim(),
         paymentMethod: _method,
@@ -395,40 +395,16 @@ class _TxnFormScreenState extends ConsumerState<TxnFormScreen> {
               error: (_, __) =>
                   const Text('Could not load categories'),
             ),
+          // Talal's rule (2026-10-22): the investor name on an
+          // entry is a plain TEXT label the admin types — no
+          // dropdown, no link to the Investors register.
           if (_type == 'investment')
-            parties.when(
-              data: (list) {
-                final investors = list
-                    .where((p) => p.kind == 'investor')
-                    .map((p) => p.name)
-                    .toSet();
-                // Add investors from transactions
-                txns.whenData((txns) {
-                  for (final t in txns.where((t) => t.isInvestment)) {
-                    if (t.investor.isNotEmpty) {
-                      investors.add(t.investor);
-                    }
-                  }
-                });
-                final sorted = investors.toList()..sort();
-                return DropdownButtonFormField<String>(
-                  initialValue: _investorName,
-                  decoration: const InputDecoration(
-                      labelText: 'Investor'),
-                  items: sorted
-                      .map((name) => DropdownMenuItem(
-                          value: name, child: Text(name)))
-                      .toList(),
-                  onChanged: (v) =>
-                      setState(() => _investorName = v),
-                  hint: const Text(
-                      'Select investor (add in More → Investors)'),
-                );
-              },
-              loading: () =>
-                  const LinearProgressIndicator(),
-              error: (_, __) =>
-                  const Text('Could not load investors'),
+            TextFormField(
+              controller: _investorCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Investor name',
+                hintText: 'Type the investor name (e.g. ASAD ANIS)',
+              ),
             ),
           if (_type != 'credit') const SizedBox(height: 12),
           parties.when(

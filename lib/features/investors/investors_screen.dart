@@ -92,13 +92,14 @@ class InvestorsScreen extends ConsumerWidget {
                               onPressed: () =>
                                   _showForm(context, ref, p),
                             ),
-                            IconButton(
-                              icon: const Icon(Icons.delete,
-                                  size: 20),
-                              color: Colors.redAccent,
-                              onPressed: () =>
-                                  _confirmDelete(context, ref, p),
-                            ),
+                            if (!p.id.startsWith('txn-'))
+                              IconButton(
+                                icon: const Icon(Icons.delete,
+                                    size: 20),
+                                color: Colors.redAccent,
+                                onPressed: () =>
+                                    _confirmDelete(context, ref, p),
+                              ),
                           ],
                         )
                       : null,
@@ -112,20 +113,12 @@ class InvestorsScreen extends ConsumerWidget {
   }
 
   /// What deleting this investor will remove, in plain words.
+  /// Talal's final model: ONLY the record and its share % — the
+  /// investment entries, Total Raised and balances never change.
   String _deleteWarning(List<Txn> txns, Party p) {
-    final f = p.name.trim().toLowerCase();
-    final mine = txns
-        .where((t) =>
-            t.isInvestment && t.investor.trim().toLowerCase() == f)
-        .toList();
-    if (mine.isEmpty) {
-      return 'Remove "${p.name}" from investors?';
-    }
-    final total = mine.fold(0.0, (a, t) => a + t.amount);
-    return 'Remove "${p.name}" from investors? His share % will be '
-        'removed. His ${mine.length} investment entries '
-        '(${fmtMoney(total)}) stay in the ledger — Total Raised '
-        'Capital will not change.';
+    return 'Remove \"${p.name}\" from investors? Only this investor '
+        'record and its share % will be deleted. Investment entries, '
+        'Total Raised Capital and balances will NOT change.';
   }
 
   Future<void> _confirmDelete(

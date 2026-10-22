@@ -1595,20 +1595,12 @@ class _InvestorsPanel extends ConsumerWidget {
   }
 
   /// What deleting this investor will remove, in plain words.
+  /// Talal's final model: ONLY the record and its share % — the
+  /// investment entries, Total Raised and balances never change.
   String _deleteWarning(Party p) {
-    final f = p.name.trim().toLowerCase();
-    final mine = txns
-        .where((t) =>
-            t.isInvestment && t.investor.trim().toLowerCase() == f)
-        .toList();
-    if (mine.isEmpty) {
-      return 'Remove "${p.name}" from investors?';
-    }
-    final total = mine.fold(0.0, (a, t) => a + t.amount);
-    return 'Remove "${p.name}" from investors? His share % will be '
-        'removed. His ${mine.length} investment entries '
-        '(${fmtMoney(total)}) stay in the ledger — Total Raised '
-        'Capital will not change.';
+    return 'Remove \"${p.name}\" from investors? Only this investor '
+        'record and its share % will be deleted. Investment entries, '
+        'Total Raised Capital and balances will NOT change.';
   }
 
   /// What this investor has actually put in so far (sum of their
@@ -1654,20 +1646,22 @@ class _InvestorsPanel extends ConsumerWidget {
               ],
             ),
           ),
-          if (isAdmin) ...[
+          if (isAdmin)
             IconButton(
               icon: const Icon(Icons.edit, size: 19),
               color: AppTheme.primary,
               visualDensity: VisualDensity.compact,
               onPressed: () => _showForm(context, ref, p),
             ),
+          // A name-only investor (from entry text) has no record
+          // to delete — the record is created via Edit/Add first.
+          if (isAdmin && !p.id.startsWith('txn-'))
             IconButton(
               icon: const Icon(Icons.delete, size: 19),
               color: Colors.redAccent,
               visualDensity: VisualDensity.compact,
               onPressed: () => _confirmDelete(context, ref, p),
             ),
-          ],
         ],
       ),
     );
