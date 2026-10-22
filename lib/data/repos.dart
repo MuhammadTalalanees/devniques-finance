@@ -512,11 +512,12 @@ class PartyRepo {
     }
   }
 
-  /// Deletes an investor completely (Talal's rule, 2026-10-21):
-  /// removes the party record (when there is one) AND deletes
-  /// their investment entries from the ledger — delete means the
-  /// investor and his money lines are gone everywhere, and the
-  /// totals adjust. The confirm dialog states this before it runs.
+  /// Removes an investor (Talal's rule, 2026-10-22 — REPLACES the
+  /// 2026-10-21 delete-everything rule): ONLY the investor record
+  /// and its share % go away. The capital entries STAY in the
+  /// ledger — Total Raised Capital never decreases — they only
+  /// lose the investor name tag, so the investors panel no longer
+  /// lists this investor. The confirm dialog states this first.
   Future<void> removeInvestor(Party p, List<Txn> txns) async {
     if (!p.id.startsWith('txn-')) {
       await remove(p.id);
@@ -526,7 +527,8 @@ class PartyRepo {
     final repo = _ref.read(txnRepoProvider);
     for (final t in txns) {
       if (t.isInvestment && t.investor.trim().toLowerCase() == f) {
-        await repo.remove(t.id);
+        await repo.update(
+            t.copyWith(investor: '', updatedAt: DateTime.now()));
       }
     }
   }

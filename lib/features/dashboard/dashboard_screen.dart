@@ -1427,9 +1427,10 @@ class _InvestorsPanel extends ConsumerWidget {
       return 'Remove "${p.name}" from investors?';
     }
     final total = mine.fold(0.0, (a, t) => a + t.amount);
-    return 'Remove "${p.name}" from investors? His ${mine.length} '
-        'investment entries (${fmtMoney(total)}) will also be '
-        'deleted from the ledger. This cannot be undone.';
+    return 'Remove "${p.name}" from investors? His share % will be '
+        'removed. His ${mine.length} investment entries '
+        '(${fmtMoney(total)}) stay in the ledger — Total Raised '
+        'Capital will not change.';
   }
 
   /// What this investor has actually put in so far (sum of their
