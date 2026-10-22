@@ -1179,17 +1179,30 @@ class _PettyCashSummary extends ConsumerWidget {
                               child: Row(
                                 children: [
                                   Expanded(
-                                    child: Text(
-                                      p.description.isEmpty
-                                          ? (p.isFund
-                                              ? 'Funds added'
-                                              : 'Petty expense')
-                                          : p.description,
-                                      style: const TextStyle(
-                                          fontSize: 13),
-                                      maxLines: 1,
-                                      overflow:
-                                          TextOverflow.ellipsis,
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          p.description.isEmpty
+                                              ? (p.isFund
+                                                  ? 'Funds added'
+                                                  : 'Petty expense')
+                                              : p.description,
+                                          style: const TextStyle(
+                                              fontSize: 13),
+                                          maxLines: 1,
+                                          overflow:
+                                              TextOverflow.ellipsis,
+                                        ),
+                                        Text(
+                                          '${p.isFund ? 'Added' : 'Spent'}'
+                                          ' · ${fmtDate(p.date)}',
+                                          style: const TextStyle(
+                                              fontSize: 11,
+                                              color: AppTheme.muted),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                   Text(
