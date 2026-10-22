@@ -156,7 +156,8 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
                                   Expanded(
                                     child: Text(
                                       uid == myId
-                                          ? '${names[uid] ?? 'Mein'} (Mein)'
+                                          ? '${names[uid] ?? 'Me'} '
+                                              '(${isAdmin ? 'Admin' : 'Me'})'
                                           : (names[uid] ?? 'User'),
                                       style: const TextStyle(
                                           fontSize: 16,
