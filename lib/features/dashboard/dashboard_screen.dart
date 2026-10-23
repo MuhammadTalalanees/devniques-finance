@@ -1553,24 +1553,10 @@ class _InvestorsPanel extends ConsumerWidget {
                 child: Text('Error: $e'),
               ),
               data: (list) {
+                // Share REGISTER only (Talal, 2026-10-23):
+                // investment entries never create investors.
                 final investors =
                     list.where((p) => p.kind == 'investor').toList();
-                final existing = investors.map((p) => p.name).toSet();
-                final names = <String>{};
-                for (final t in txns.where((t) => t.isInvestment)) {
-                  if (t.investor.isNotEmpty) names.add(t.investor);
-                }
-                for (final name in names) {
-                  if (!existing.contains(name)) {
-                    investors.add(Party(
-                      id: 'txn-$name',
-                      name: name,
-                      kind: 'investor',
-                      phone: '',
-                      updatedAt: DateTime.now(),
-                    ));
-                  }
-                }
                 if (investors.isEmpty) {
                   return const Padding(
                     padding: EdgeInsets.all(12),
@@ -1582,8 +1568,7 @@ class _InvestorsPanel extends ConsumerWidget {
                 return Column(
                   children: [
                     for (final p in investors)
-                      _investorRow(
-                          context, ref, p, raised, _investedOf(p.name)),
+                      _investorRow(context, ref, p, raised),
                   ],
                 );
               },
@@ -1603,18 +1588,8 @@ class _InvestorsPanel extends ConsumerWidget {
         'Total Raised Capital and balances will NOT change.';
   }
 
-  /// What this investor has actually put in so far (sum of their
-  /// investment entries) — shown until the admin sets a share %.
-  double _investedOf(String name) {
-    final n = name.trim().toLowerCase();
-    return txns
-        .where((t) =>
-            t.isInvestment && t.investor.trim().toLowerCase() == n)
-        .fold(0.0, (a, t) => a + t.amount);
-  }
-
-  Widget _investorRow(BuildContext context, WidgetRef ref, Party p,
-      double raised, double invested) {
+  Widget _investorRow(
+      BuildContext context, WidgetRef ref, Party p, double raised) {
     final pct = p.sharePercent;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
@@ -1639,7 +1614,7 @@ class _InvestorsPanel extends ConsumerWidget {
                 Text(
                   pct != null
                       ? '${_fmtPct(pct)}%  ·  ${fmtMoney(raised * pct / 100)}'
-                      : '${fmtMoney(invested)}  ·  Share % not set',
+                      : 'Share % not set',
                   style:
                       const TextStyle(color: AppTheme.muted, fontSize: 12.5),
                 ),
@@ -1653,9 +1628,7 @@ class _InvestorsPanel extends ConsumerWidget {
               visualDensity: VisualDensity.compact,
               onPressed: () => _showForm(context, ref, p),
             ),
-          // A name-only investor (from entry text) has no record
-          // to delete — the record is created via Edit/Add first.
-          if (isAdmin && !p.id.startsWith('txn-'))
+          if (isAdmin)
             IconButton(
               icon: const Icon(Icons.delete, size: 19),
               color: Colors.redAccent,

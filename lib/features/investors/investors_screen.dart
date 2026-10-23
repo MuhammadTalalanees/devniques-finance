@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/models.dart';
 import '../../data/repos.dart';
-import '../../core/formatters.dart';
 import '../../core/theme.dart';
 
 /// Investors: manage investor names for investment entries.
@@ -14,7 +13,6 @@ class InvestorsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final parties = ref.watch(partyListProvider);
-    final txns = ref.watch(txnListProvider);
     final profile = ref.watch(profileProvider);
     final isAdmin =
         profile.whenData((p) => p?.isAdmin ?? false).value ?? false;
@@ -34,27 +32,11 @@ class InvestorsScreen extends ConsumerWidget {
             const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Error: $e')),
         data: (list) {
-          // Merge parties with investors found in transactions
+          // Investors = the share REGISTER only (Talal,
+          // 2026-10-23): names come only from records added
+          // here. Investment entries NEVER create investors —
+          // this section has no connection with the ledger.
           final investors = list.where((p) => p.kind == 'investor').toList();
-          txns.whenData((txns) {
-            final names = <String>{};
-            for (final t in txns.where((t) => t.isInvestment)) {
-              if (t.investor.isNotEmpty) names.add(t.investor);
-            }
-            // Add transaction investors not already in parties
-            final existing = investors.map((p) => p.name).toSet();
-            for (final name in names) {
-              if (!existing.contains(name)) {
-                investors.add(Party(
-                  id: 'txn-$name',
-                  name: name,
-                  kind: 'investor',
-                  phone: '',
-                  updatedAt: DateTime.now(),
-                ));
-              }
-            }
-          });
           if (investors.isEmpty) {
             return const Center(
                 child: Text(
@@ -92,8 +74,7 @@ class InvestorsScreen extends ConsumerWidget {
                               onPressed: () =>
                                   _showForm(context, ref, p),
                             ),
-                            if (!p.id.startsWith('txn-'))
-                              IconButton(
+                            IconButton(
                                 icon: const Icon(Icons.delete,
                                     size: 20),
                                 color: Colors.redAccent,
