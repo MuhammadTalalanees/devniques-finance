@@ -8,6 +8,7 @@ import '../../core/formatters.dart';
 import '../../core/theme.dart';
 import '../../data/repos.dart';
 import '../attendance/attendance_screen.dart';
+import 'attendance_register_screen.dart';
 
 /// Human Resources hub (Phase 1, 2026-10-22 — Talal's Facteno
 /// model): Admin controls everything from here; employees see
@@ -50,6 +51,10 @@ class HrHubScreen extends ConsumerWidget {
         children: [
           tile(Icons.fact_check, 'Attendance',
               'WiFi attendance of the team', const AttendanceScreen()),
+          if (isAdmin)
+            tile(Icons.table_chart, 'Attendance Register',
+                'Monthly present, leave, late and overtime table',
+                const AttendanceRegisterScreen()),
           if (isAdmin)
             tile(Icons.people, 'Employees',
                 'Directory of everyone on the team',
@@ -191,6 +196,10 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
   Future<void> _edit(Map<String, dynamic> row) async {
     final nameCtrl =
         TextEditingController(text: (row['name'] ?? '') as String);
+    final deptCtrl = TextEditingController(
+        text: (row['department'] ?? '') as String);
+    final codeCtrl =
+        TextEditingController(text: (row['emp_code'] ?? '') as String);
     var role = (row['role'] ?? 'view_only') as String;
     final ok = await showDialog<bool>(
           context: context,
@@ -203,6 +212,20 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
                   controller: nameCtrl,
                   decoration:
                       const InputDecoration(labelText: 'Full name'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: deptCtrl,
+                  decoration: const InputDecoration(
+                      labelText: 'Department',
+                      hintText: 'Type it — e.g. Accounts'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: codeCtrl,
+                  decoration: const InputDecoration(
+                      labelText: 'Employee code',
+                      hintText: 'e.g. EMP-001'),
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
@@ -237,6 +260,8 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
           'profiles', row['id'] as String, {
         'name': nameCtrl.text.trim(),
         'role': role,
+        'department': deptCtrl.text.trim(),
+        'emp_code': codeCtrl.text.trim(),
       });
       ref.invalidate(profileProvider);
       await _load();
@@ -283,8 +308,20 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
                             ),
                           ),
                           title: Text(name.isNotEmpty ? name : email),
-                          subtitle: Text(
-                              '$email\n${role == 'admin' ? 'Admin' : role == 'add_only' ? 'Add only' : 'View only'}'),
+                          subtitle: Text([
+                            email,
+                            role == 'admin'
+                                ? 'Admin'
+                                : role == 'add_only'
+                                    ? 'Add only'
+                                    : 'View only',
+                            if ((r['department'] ?? '')
+                                .toString()
+                                .isNotEmpty)
+                              r['department'] as String,
+                            if ((r['emp_code'] ?? '').toString().isNotEmpty)
+                              r['emp_code'] as String,
+                          ].join('\n')),
                           isThreeLine: true,
                           trailing: IconButton(
                             icon: const Icon(Icons.edit, size: 20),
