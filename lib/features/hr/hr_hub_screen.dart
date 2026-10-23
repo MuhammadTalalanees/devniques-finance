@@ -198,8 +198,6 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
         TextEditingController(text: (row['name'] ?? '') as String);
     final deptCtrl = TextEditingController(
         text: (row['department'] ?? '') as String);
-    final codeCtrl =
-        TextEditingController(text: (row['emp_code'] ?? '') as String);
     var role = (row['role'] ?? 'view_only') as String;
     final ok = await showDialog<bool>(
           context: context,
@@ -219,13 +217,6 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
                   decoration: const InputDecoration(
                       labelText: 'Department',
                       hintText: 'Type it — e.g. Accounts'),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: codeCtrl,
-                  decoration: const InputDecoration(
-                      labelText: 'Employee code',
-                      hintText: 'e.g. EMP-001'),
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
@@ -261,7 +252,6 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
         'name': nameCtrl.text.trim(),
         'role': role,
         'department': deptCtrl.text.trim(),
-        'emp_code': codeCtrl.text.trim(),
       });
       ref.invalidate(profileProvider);
       await _load();
@@ -319,8 +309,6 @@ class _EmployeesScreenState extends ConsumerState<EmployeesScreen> {
                                 .toString()
                                 .isNotEmpty)
                               r['department'] as String,
-                            if ((r['emp_code'] ?? '').toString().isNotEmpty)
-                              r['emp_code'] as String,
                           ].join('\n')),
                           isThreeLine: true,
                           trailing: IconButton(
@@ -1011,9 +999,9 @@ class _LeaveScreenState extends ConsumerState<LeaveScreen> {
   List<Map<String, dynamic>> _ledger = [];
   List<Map<String, dynamic>> _holidays = [];
   Map<String, String> _names = {};
+  Map<String, String> _depts = {};
   bool _loading = true;
   String? _error;
-  String? _filterUser; // admin only; null = everyone
 
   bool get _isAdmin =>
       ref.read(profileProvider).value?.isAdmin ?? false;
@@ -1038,12 +1026,18 @@ class _LeaveScreenState extends ConsumerState<LeaveScreen> {
           await c.from('holidays').select().order('date');
       final names =
           await ref.read(supaServiceProvider).fetchProfileNames();
+      final profiles =
+          await ref.read(supaServiceProvider).selectSince('profiles', null);
       if (!mounted) return;
       setState(() {
         _types = (types as List).cast<Map<String, dynamic>>();
         _ledger = (ledger as List).cast<Map<String, dynamic>>();
         _holidays = (holidays as List).cast<Map<String, dynamic>>();
         _names = names;
+        _depts = {
+          for (final pr in profiles)
+            pr['id'] as String: ((pr['department'] ?? '') as String)
+        };
         _loading = false;
       });
     } catch (e) {
@@ -1060,6 +1054,18 @@ class _LeaveScreenState extends ConsumerState<LeaveScreen> {
     for (final r in _ledger) {
       if (r['user_id'] == userId && r['leave_type_id'] == typeId) {
         sum += (r['delta'] as num).toDouble();
+      }
+    }
+    return sum;
+  }
+
+  /// Days actually taken (the negative side of the ledger).
+  double _used(String userId, String typeId) {
+    var sum = 0.0;
+    for (final r in _ledger) {
+      if (r['user_id'] == userId && r['leave_type_id'] == typeId) {
+        final d = (r['delta'] as num).toDouble();
+        if (d < 0) sum -= d;
       }
     }
     return sum;
@@ -1195,9 +1201,10 @@ class _LeaveScreenState extends ConsumerState<LeaveScreen> {
       );
     }
     final users = _isAdmin
-        ? (_filterUser == null
-            ? _names.keys.toList()
-            : [_filterUser!])
+        ? (_names.entries.toList()
+              ..sort((a, b) => a.value.compareTo(b.value)))
+            .map((e) => e.key)
+            .toList()
         : [_myId];
     return Scaffold(
       appBar: AppBar(title: const Text('Leave')),
@@ -1220,51 +1227,49 @@ class _LeaveScreenState extends ConsumerState<LeaveScreen> {
                   ),
               ],
             ),
-            if (_isAdmin) ...[
-              const SizedBox(height: 8),
-              DropdownButtonFormField<String?>(
-                initialValue: _filterUser,
-                decoration:
-                    const InputDecoration(labelText: 'Employee'),
-                items: [
-                  const DropdownMenuItem(
-                      value: null, child: Text('Everyone')),
-                  for (final e in _names.entries)
-                    DropdownMenuItem(value: e.key, child: Text(e.value)),
+            const SizedBox(height: 6),
+            const Text(
+              'Each leave type shows: Used / Left',
+              style: TextStyle(fontSize: 12, color: AppTheme.muted),
+            ),
+            const SizedBox(height: 8),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                columns: [
+                  const DataColumn(label: Text('Employee')),
+                  const DataColumn(label: Text('Department')),
+                  for (final t in _types)
+                    DataColumn(label: Text(t['name'] as String)),
+                  const DataColumn(
+                      label: Text('Total used'), numeric: true),
+                  const DataColumn(
+                      label: Text('Total left'), numeric: true),
                 ],
-                onChanged: (v) => setState(() => _filterUser = v),
-              ),
-            ],
-            const SizedBox(height: 10),
-            for (final u in users)
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (_isAdmin)
-                        Text(_names[u] ?? '',
-                            style: const TextStyle(
-                                fontWeight: FontWeight.w600)),
+                rows: [
+                  for (final u in users)
+                    DataRow(cells: [
+                      DataCell(Text(_names[u] ?? '',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w600))),
+                      DataCell(Text((_depts[u] ?? '').isEmpty
+                          ? '—'
+                          : _depts[u]!)),
                       for (final t in _types)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Row(
-                            children: [
-                              Expanded(child: Text(t['name'] as String)),
-                              Text(
-                                '${fmtDays(_balance(u, t['id'] as String))} left',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w600),
-                              ),
-                            ],
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
+                        DataCell(Text(
+                            '${fmtDays(_used(u, t['id'] as String))} / ${fmtDays(_balance(u, t['id'] as String))}')),
+                      DataCell(Text(fmtDays(_types.fold(
+                          0.0,
+                          (a, t) =>
+                              a + _used(u, t['id'] as String))))),
+                      DataCell(Text(fmtDays(_types.fold(
+                          0.0,
+                          (a, t) =>
+                              a + _balance(u, t['id'] as String))))),
+                    ]),
+                ],
               ),
+            ),
             const SizedBox(height: 20),
             Row(
               children: [

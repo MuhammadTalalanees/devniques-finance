@@ -23,8 +23,8 @@ import '../../data/repos.dart';
 ///  - Late = first entry after 10:00 AM; Late (min) sums the
 ///    minutes past 10:00.
 ///  - Overtime = hours past 9 in a day, totalled and rounded.
-/// Department and Code are free text on the employee profile
-/// (Employees → Edit) — Talal types them himself, no dropdown.
+/// Department is free text on the employee profile
+/// (Employees → Edit) — Talal types it himself, no dropdown.
 class AttendanceRegisterScreen extends ConsumerStatefulWidget {
   const AttendanceRegisterScreen({super.key});
 
@@ -34,8 +34,7 @@ class AttendanceRegisterScreen extends ConsumerStatefulWidget {
 }
 
 class _RegRow {
-  _RegRow(this.code, this.name, this.department);
-  final String code;
+  _RegRow(this.name, this.department);
   final String name;
   final String department;
   int present = 0;
@@ -195,11 +194,7 @@ class _AttendanceRegisterScreenState
         final dept = ((p['department'] ?? '') as String).trim();
         if (dept.isNotEmpty) deptSet.add(dept);
         if (_department.isNotEmpty && dept != _department) continue;
-        final row = _RegRow(
-          ((p['emp_code'] ?? '') as String).trim(),
-          name,
-          dept,
-        );
+        final row = _RegRow(name, dept);
         final days = byUser[uid] ?? {};
         for (final d in workingDays) {
           final key = DateTime.utc(d.year, d.month, d.day);
@@ -227,13 +222,7 @@ class _AttendanceRegisterScreenState
         }
         rows.add(row);
       }
-      rows.sort((a, b) {
-        final c = a.code.compareTo(b.code);
-        if (a.code.isNotEmpty && b.code.isNotEmpty && c != 0) return c;
-        if (a.code.isNotEmpty && b.code.isEmpty) return -1;
-        if (a.code.isEmpty && b.code.isNotEmpty) return 1;
-        return a.name.compareTo(b.name);
-      });
+      rows.sort((a, b) => a.name.compareTo(b.name));
 
       if (!mounted) return;
       setState(() {
@@ -343,7 +332,6 @@ class _AttendanceRegisterScreenState
                             child: SingleChildScrollView(
                               child: DataTable(
                                 columns: const [
-                                  DataColumn(label: Text('Code')),
                                   DataColumn(label: Text('Employee')),
                                   DataColumn(label: Text('Department')),
                                   DataColumn(label: Text('Present'), numeric: true),
@@ -357,7 +345,6 @@ class _AttendanceRegisterScreenState
                                 rows: [
                                   for (final r in _rows)
                                     DataRow(cells: [
-                                      DataCell(Text(r.code.isEmpty ? '—' : r.code)),
                                       DataCell(Text(r.name,
                                           style: const TextStyle(
                                               fontWeight: FontWeight.w600))),
