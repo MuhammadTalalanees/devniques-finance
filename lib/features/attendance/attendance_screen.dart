@@ -462,7 +462,7 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
     final key = '${day.toIso8601String()}|$uid';
     final open = _openCells.contains(key);
     final firstIn = sum.trackFirst;
-    final lastOut = sum.anyOpen ? null : sum.lastEffExit;
+    final lastOut = sum.trackOpen ? null : sum.trackLastExit;
     return Card(
       margin: EdgeInsets.zero,
       child: Column(
@@ -500,7 +500,7 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
                                       fontSize: 13.5),
                                   overflow: TextOverflow.ellipsis),
                             ),
-                            if (sum.anyOpen)
+                            if (sum.trackOpen)
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 6, vertical: 2),
@@ -655,6 +655,20 @@ class _DaySummary {
   }
 
   bool get anyOpen => sessions.any((s) => effExit(s) == null);
+
+  /// "In office" comes ONLY from the WiFi track (Talal's final
+  /// model) — an open MANUAL session never makes the day look
+  /// still-in. The header span end is the WiFi track's too.
+  bool get trackOpen => track.any((s) => effExit(s) == null);
+
+  DateTime? get trackLastExit {
+    DateTime? last;
+    for (final s in track) {
+      final e = effExit(s);
+      if (e != null && (last == null || e.isAfter(last))) last = e;
+    }
+    return last;
+  }
 
   DateTime? get lastEffExit {
     DateTime? last;
