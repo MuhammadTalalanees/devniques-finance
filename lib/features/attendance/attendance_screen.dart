@@ -7,17 +7,18 @@ import '../../core/theme.dart';
 import '../../data/models.dart';
 import '../../data/repos.dart';
 
-/// Attendance — day view, one ROW per session (Talal,
-/// 2026-10-23: the old month-of-cards layout made endless
-/// long columns on PC).
+/// Attendance — calendar + monthly view (Talal, 2026-10-23).
 ///
-/// Har employee ka apna block hai; us ke andar us din ki har
-/// session ek saaf row hai — entry, exit, source, duration.
-/// Admin kisi bhi row ko wahin se Edit/Delete kar sakta hai
-/// (attendance correction, migration v15) — baaki sab ke liye
-/// records waise hi lock hain jaise pehle thay. Working hours
-/// ka rule wahi purana: pehli WiFi entry se aakhri WiFi exit
-/// tak ka span. Saare times Pakistan time mein.
+/// Upar ek calendar hai: month wahin se badalta hai, kisi date
+/// par tap karo to sirf us din ki attendance dikhti hai
+/// (dobara tap / All month se pura month wapas). Neeche mahine
+/// ki attendance dates ke hisaab se aati hai — har date par
+/// sab employees alag alag columns mein (PC par 4 columns).
+/// Details band rehti hain: employee par tap karne se us ki
+/// sessions khulti hain, aur admin wahin se Edit/Delete kar
+/// sakta hai (attendance correction, migration v15). Working
+/// hours ka rule wahi purana: pehli WiFi entry se aakhri WiFi
+/// exit tak ka span. Saare times Pakistan time mein.
 class AttendanceScreen extends ConsumerStatefulWidget {
   const AttendanceScreen({super.key});
 
@@ -26,19 +27,13 @@ class AttendanceScreen extends ConsumerStatefulWidget {
 }
 
 /// An instant re-framed as Pakistan wall time (UTC+5, no DST):
-/// its fields read as the PKT clock. Attendance days and times
-/// are always shown in PKT, wherever the viewer is.
+/// its fields read as the PKT clock.
 DateTime pkt(DateTime t) => t.toUtc().add(const Duration(hours: 5));
 
 class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
-  DateTime _day = _todayPkt();
-
-  static DateTime _todayPkt() {
-    final n = pkt(DateTime.now());
-    return DateTime(n.year, n.month, n.day);
-  }
-
-  DateTime get _month => firstOfMonth(_day);
+  DateTime _month = firstOfMonth(pkt(DateTime.now()));
+  DateTime? _selectedDay;
+  final Set<String> _openCells = {};
 
   static final _time = DateFormat('hh:mm a');
 
@@ -49,14 +44,13 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
     return '${m}m';
   }
 
-  bool _isToday(DateTime d) {
-    final t = _todayPkt();
-    return d.year == t.year && d.month == t.month && d.day == t.day;
+  static DateTime _todayPkt() {
+    final n = pkt(DateTime.now());
+    return DateTime(n.year, n.month, n.day);
   }
 
-  void _shiftDay(int delta) {
-    setState(() => _day = DateTime(_day.year, _day.month, _day.day + delta));
-  }
+  bool _sameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
 
   /// PKT wall fields -> the real instant.
   DateTime _instantFromWall(DateTime wall) => DateTime.utc(
@@ -205,74 +199,164 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
     }
   }
 
+  // ---------------- calendar ----------------
+
+  Widget _calendar(Set<DateTime> daysWithData) {
+    final first = _month;
+    final daysInMonth = DateTime(first.year, first.month + 1, 0).day;
+    final leadBlanks = first.weekday - 1; // Monday first
+    final today = _todayPkt();
+    final canNext = first.year < today.year ||
+        (first.year == today.year && first.month < today.month);
+    const weekDays = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
+    return Card(
+      margin: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(10, 6, 10, 10),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.chevron_left),
+                  onPressed: () => setState(() {
+                    _month = DateTime(first.year, first.month - 1, 1);
+                    _selectedDay = null;
+                  }),
+                ),
+                Text(fmtMonth(first),
+                    style: const TextStyle(
+                        fontSize: 15.5, fontWeight: FontWeight.w700)),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_selectedDay != null)
+                      TextButton(
+                        onPressed: () =>
+                            setState(() => _selectedDay = null),
+                        child: const Text('All month'),
+                      ),
+                    IconButton(
+                      icon: const Icon(Icons.chevron_right),
+                      onPressed: canNext
+                          ? () => setState(() {
+                                _month =
+                                    DateTime(first.year, first.month + 1, 1);
+                                _selectedDay = null;
+                              })
+                          : null,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            Row(
+              children: weekDays
+                  .map((w) => Expanded(
+                        child: Center(
+                          child: Text(w,
+                              style: const TextStyle(
+                                  fontSize: 11, color: AppTheme.muted)),
+                        ),
+                      ))
+                  .toList(),
+            ),
+            const SizedBox(height: 4),
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate:
+                  const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 7,
+                mainAxisExtent: 34,
+              ),
+              itemCount: leadBlanks + daysInMonth,
+              itemBuilder: (_, i) {
+                if (i < leadBlanks) return const SizedBox.shrink();
+                final dayNum = i - leadBlanks + 1;
+                final date = DateTime(first.year, first.month, dayNum);
+                final isToday = _sameDay(date, today);
+                final isSel =
+                    _selectedDay != null && _sameDay(date, _selectedDay!);
+                final hasData = daysWithData.any((d) => _sameDay(d, date));
+                return InkWell(
+                  onTap: () => setState(() =>
+                      _selectedDay = isSel ? null : date),
+                  borderRadius: BorderRadius.circular(17),
+                  child: Container(
+                    margin: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isSel ? AppTheme.primary : null,
+                      border: isToday && !isSel
+                          ? Border.all(color: AppTheme.primary, width: 1.4)
+                          : null,
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text('$dayNum',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight:
+                                  isSel || isToday ? FontWeight.w700 : null,
+                              color: isSel ? Colors.white : null,
+                            )),
+                        Container(
+                          width: 4,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: hasData
+                                ? (isSel ? Colors.white : AppTheme.income)
+                                : Colors.transparent,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ---------------- month body ----------------
+
   @override
   Widget build(BuildContext context) {
     final sessionsAsync = ref.watch(attendanceMonthProvider(_month));
     final namesAsync = ref.watch(profileNamesProvider);
     final profile = ref.watch(profileProvider);
     final isAdmin = profile.whenData((p) => p?.isAdmin ?? false).value ?? false;
-    final myId = profile.whenData((p) => p?.id).value;
     final names = namesAsync.value ?? const <String, String>{};
+    final sessions = sessionsAsync.value ?? const <AttendanceSession>[];
+
+    final daysWithData = <DateTime>{};
+    for (final s in sessions) {
+      final p = pkt(s.entryAt);
+      daysWithData.add(DateTime(p.year, p.month, p.day));
+    }
 
     return Scaffold(
       appBar: AppBar(title: const Text('Human Resources (HR)')),
       body: Column(
         children: [
-          // ---- day selector ----
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.chevron_left),
-                  onPressed: () => _shiftDay(-1),
-                ),
-                Column(
-                  children: [
-                    Text(
-                      _isToday(_day)
-                          ? 'Today'
-                          : DateFormat('EEEE').format(_day),
-                      style: const TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.w700),
-                    ),
-                    Text(fmtDate(_day),
-                        style: const TextStyle(
-                            fontSize: 12.5, color: AppTheme.muted)),
-                  ],
-                ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (!_isToday(_day))
-                      TextButton(
-                        onPressed: () => setState(() => _day = _todayPkt()),
-                        child: const Text('Today'),
-                      ),
-                    IconButton(
-                      icon: const Icon(Icons.chevron_right),
-                      onPressed: _isToday(_day) ? null : () => _shiftDay(1),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
+          _calendar(daysWithData),
           const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16),
+            padding: EdgeInsets.fromLTRB(16, 4, 16, 0),
             child: Text(
-              'Attendance is recorded automatically via office WiFi, '
-              'or marked manually from the attendance app (Manual '
-              'badge). Working hours run from the first WiFi entry '
-              'to the last WiFi exit of the day. Only the admin can '
-              'correct a record, with the Edit and Delete buttons. '
-              'All times are Pakistan time.',
+              'Tap a date to see only that day. Tap an employee to '
+              'open the details. Only the admin can correct a '
+              'record (Edit / Delete). All times are Pakistan time.',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 12, color: AppTheme.muted),
             ),
           ),
-          const SizedBox(height: 8),
           Expanded(
             child: RefreshIndicator(
               onRefresh: () async {
@@ -288,113 +372,173 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
                       child: Text('Could not load attendance.\n$e',
                           textAlign: TextAlign.center)),
                 ]),
-                data: (sessions) {
-                  // This day's sessions, grouped per employee.
-                  final daySessions = sessions.where((s) {
-                    final p = pkt(s.entryAt);
-                    return p.year == _day.year &&
-                        p.month == _day.month &&
-                        p.day == _day.day;
-                  }).toList();
-                  if (daySessions.isEmpty) {
-                    return ListView(children: const [
-                      SizedBox(height: 120),
-                      Center(
-                          child:
-                              Text('No attendance recorded for this day.')),
-                    ]);
-                  }
-                  final byUser = <String, List<AttendanceSession>>{};
-                  for (final s in daySessions) {
-                    byUser.putIfAbsent(s.userId, () => []).add(s);
-                  }
-                  final monthByUser = <String, List<AttendanceSession>>{};
-                  for (final s in sessions) {
-                    monthByUser.putIfAbsent(s.userId, () => []).add(s);
-                  }
-                  final userIds = byUser.keys.toList()
-                    ..sort(
-                        (a, b) => (names[a] ?? '').compareTo(names[b] ?? ''));
-                  return ListView.builder(
-                    padding: const EdgeInsets.only(bottom: 24),
-                    itemCount: userIds.length,
-                    itemBuilder: (context, i) {
-                      final uid = userIds[i];
-                      final list = byUser[uid]!
-                        ..sort((a, b) => a.entryAt.compareTo(b.entryAt));
-                      final daySum = _DaySummary(day: _day, sessions: list);
-                      final open = daySum.anyOpen;
-                      return Card(
-                        margin: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            // ---- employee header ----
-                            Padding(
-                              padding:
-                                  const EdgeInsets.fromLTRB(14, 12, 14, 6),
-                              child: Row(
-                                children: [
-                                  const CircleAvatar(
-                                    radius: 16,
-                                    backgroundColor: AppTheme.primary,
-                                    child: Icon(Icons.person,
-                                        size: 18, color: Colors.white),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Text(
-                                      uid == myId
-                                          ? '${names[uid] ?? 'Me'} '
-                                              '(${isAdmin ? 'Admin' : 'Me'})'
-                                          : (names[uid] ?? 'User'),
-                                      style: const TextStyle(
-                                          fontSize: 15.5,
-                                          fontWeight: FontWeight.w700),
-                                    ),
-                                  ),
-                                  if (open)
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 8, vertical: 3),
-                                      decoration: BoxDecoration(
-                                        color: AppTheme.income
-                                            .withValues(alpha: 0.12),
-                                        borderRadius:
-                                            BorderRadius.circular(20),
-                                      ),
-                                      child: const Text('In office',
-                                          style: TextStyle(
-                                              fontSize: 11,
-                                              color: AppTheme.income,
-                                              fontWeight: FontWeight.w700)),
-                                    ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Day ${_fmtDur(daySum.total)} · '
-                                    'Month ${_fmtDur(_monthTotal(monthByUser[uid]!))}',
-                                    style: const TextStyle(
-                                        color: AppTheme.muted,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const Divider(height: 1),
-                            // ---- one row per session ----
-                            ...list.map(
-                                (s) => _sessionRow(s, daySum, isAdmin)),
-                          ],
-                        ),
-                      );
-                    },
-                  );
-                },
+                data: (_) => _monthList(sessions, names, isAdmin),
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _monthList(List<AttendanceSession> sessions,
+      Map<String, String> names, bool isAdmin) {
+    // Group: day -> user -> sessions (month from the provider,
+    // optionally narrowed to the calendar's selected day).
+    final byDay = <DateTime, Map<String, List<AttendanceSession>>>{};
+    for (final s in sessions) {
+      final p = pkt(s.entryAt);
+      final day = DateTime(p.year, p.month, p.day);
+      if (_selectedDay != null && !_sameDay(day, _selectedDay!)) {
+        continue;
+      }
+      byDay
+          .putIfAbsent(day, () => {})
+          .putIfAbsent(s.userId, () => [])
+          .add(s);
+    }
+    final days = byDay.keys.toList()..sort((a, b) => b.compareTo(a));
+    if (days.isEmpty) {
+      return ListView(children: const [
+        SizedBox(height: 100),
+        Center(child: Text('No attendance recorded.')),
+      ]);
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.only(bottom: 24),
+      itemCount: days.length,
+      itemBuilder: (context, i) {
+        final day = days[i];
+        final byUser = byDay[day]!;
+        final userIds = byUser.keys.toList()
+          ..sort((a, b) => (names[a] ?? '').compareTo(names[b] ?? ''));
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+              child: Text(
+                '${DateFormat('EEEE, ').format(day)}${fmtDate(day)}',
+                style: const TextStyle(
+                    fontSize: 14.5, fontWeight: FontWeight.w700),
+              ),
+            ),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final w = constraints.maxWidth;
+                final cols = w >= 1050 ? 4 : (w >= 640 ? 2 : 1);
+                final cellW = (w - 24 - (cols - 1) * 10) / cols;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: userIds
+                        .map((uid) => SizedBox(
+                              width: cellW,
+                              child: _employeeCell(
+                                day,
+                                uid,
+                                names[uid] ?? 'User',
+                                byUser[uid]!,
+                                isAdmin,
+                              ),
+                            ))
+                        .toList(),
+                  ),
+                );
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _employeeCell(DateTime day, String uid, String name,
+      List<AttendanceSession> list, bool isAdmin) {
+    final sorted = [...list]..sort((a, b) => a.entryAt.compareTo(b.entryAt));
+    final sum = _DaySummary(day: day, sessions: sorted);
+    final key = '${day.toIso8601String()}|$uid';
+    final open = _openCells.contains(key);
+    final firstIn = sum.trackFirst;
+    final lastOut = sum.anyOpen ? null : sum.lastEffExit;
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            onTap: () => setState(
+                () => open ? _openCells.remove(key) : _openCells.add(key)),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 15,
+                    backgroundColor: AppTheme.primary,
+                    child: Text(
+                      name.isNotEmpty ? name[0].toUpperCase() : '?',
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(name,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 13.5),
+                                  overflow: TextOverflow.ellipsis),
+                            ),
+                            if (sum.anyOpen)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color:
+                                      AppTheme.income.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Text('In office',
+                                    style: TextStyle(
+                                        fontSize: 10,
+                                        color: AppTheme.income,
+                                        fontWeight: FontWeight.w700)),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${_time.format(pkt(firstIn))} → '
+                          '${lastOut != null ? _time.format(pkt(lastOut)) : 'still in'}'
+                          '  ·  ${_fmtDur(sum.total)}',
+                          style: const TextStyle(
+                              color: AppTheme.muted, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(open ? Icons.expand_less : Icons.expand_more,
+                      color: AppTheme.muted, size: 20),
+                ],
+              ),
+            ),
+          ),
+          if (open) ...[
+            const Divider(height: 1),
+            ...sorted.map((s) => _sessionRow(s, sum, isAdmin)),
+            const SizedBox(height: 4),
+          ],
         ],
       ),
     );
@@ -407,79 +551,68 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
     final autoClosed = s.isOpen && eff != null;
     final dur = (eff ?? DateTime.now()).difference(s.entryAt);
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
       child: Row(
         children: [
           Icon(
             s.isManual ? Icons.touch_app : Icons.wifi,
-            size: 19,
+            size: 16,
             color: isOpenNow ? AppTheme.income : AppTheme.muted,
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           Expanded(
             child: Text(
-              '${_time.format(pkt(s.entryAt))}  →  '
-              '${isOpenNow ? 'still in office' : _time.format(pkt(eff))}'
+              '${_time.format(pkt(s.entryAt))} → '
+              '${isOpenNow ? 'still in' : _time.format(pkt(eff))}'
               '${autoClosed ? ' (auto)' : ''}',
-              style: const TextStyle(fontSize: 13.5),
+              style: const TextStyle(fontSize: 12.5),
             ),
           ),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
             decoration: BoxDecoration(
               color: s.isManual
                   ? const Color(0xFFFFF3E0)
                   : const Color(0xFFE3F2FD),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(9),
             ),
             child: Text(
               s.isManual ? 'Manual' : 'WiFi',
               style: TextStyle(
-                  fontSize: 10,
+                  fontSize: 9.5,
                   fontWeight: FontWeight.w700,
                   color: s.isManual
                       ? const Color(0xFFE65100)
                       : const Color(0xFF1565C0)),
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 7),
           Text(_fmtDur(dur.isNegative ? Duration.zero : dur),
               style: const TextStyle(
-                  color: AppTheme.muted, fontWeight: FontWeight.w600)),
+                  color: AppTheme.muted,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12)),
           if (isAdmin) ...[
             IconButton(
-              icon: const Icon(Icons.edit, size: 19),
+              icon: const Icon(Icons.edit, size: 17),
               color: AppTheme.primary,
               tooltip: 'Edit',
               visualDensity: VisualDensity.compact,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
               onPressed: () => _editSession(s),
             ),
             IconButton(
-              icon: const Icon(Icons.delete, size: 19),
+              icon: const Icon(Icons.delete, size: 17),
               color: Colors.redAccent,
               tooltip: 'Delete',
               visualDensity: VisualDensity.compact,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
               onPressed: () => _deleteSession(s),
             ),
           ],
         ],
       ),
     );
-  }
-
-  Duration _monthTotal(List<AttendanceSession> sessions) {
-    final byDay = <DateTime, List<AttendanceSession>>{};
-    for (final s in sessions) {
-      final p = pkt(s.entryAt);
-      final day = DateTime(p.year, p.month, p.day);
-      byDay.putIfAbsent(day, () => []).add(s);
-    }
-    var total = Duration.zero;
-    for (final e in byDay.entries) {
-      final list = e.value..sort((a, b) => a.entryAt.compareTo(b.entryAt));
-      total += _DaySummary(day: e.key, sessions: list).total;
-    }
-    return total;
   }
 }
 
@@ -522,6 +655,15 @@ class _DaySummary {
   }
 
   bool get anyOpen => sessions.any((s) => effExit(s) == null);
+
+  DateTime? get lastEffExit {
+    DateTime? last;
+    for (final s in sessions) {
+      final e = effExit(s);
+      if (e != null && (last == null || e.isAfter(last))) last = e;
+    }
+    return last;
+  }
 
   /// Working hours: the counting track's span — first entry to
   /// last exit, beech ka waqt bhi shamil (Talal ka rule,
