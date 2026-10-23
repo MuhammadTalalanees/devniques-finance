@@ -191,13 +191,6 @@ class SyncNotifier extends Notifier<SyncState> {
     await LocalDb.instance.dropOps(done);
   }
 
-  static const _tables = [
-    'categories',
-    'parties',
-    'transactions',
-    'profiles',
-    'petty_cash'
-  ];
 
   /// Local column allow-list per table (remote rows carry extra columns
   /// like created_at / created_by which don't exist locally).
@@ -232,17 +225,28 @@ class SyncNotifier extends Notifier<SyncState> {
         .map((t) => _pullTable(supa, db, t)));
     // Wave 2: transactions need categories/parties for name denormalization.
     await _pullTable(supa, db, 'transactions');
-    // Reconcile deletes at most once per hour — deletes are rare, and
-    // fetching full id lists on every launch is pure overhead.
+    // Reconcile deletes: the small reference tables on EVERY pull
+    // (they are tiny; a server-side delete — e.g. wiping the
+    // investor register from the SQL editor — must show at once,
+    // not up to an hour later; Talal, 2026-10-23). A failed
+    // id-fetch skips the reconcile, it never wipes on doubt.
+    await Future.wait(
+        ['categories', 'parties', 'profiles', 'petty_cash'].map((t) async {
+      try {
+        final remoteIds = (await supa.allIds(t)).toSet();
+        await db.deleteMissing(t, remoteIds);
+      } catch (_) {
+        // offline or fetch failed — keep the local copy as-is
+      }
+    }));
+    // Transactions are big: reconcile at most once per hour.
     final lastReconcileStr = await db.kvGet('last_reconcile');
     final lastReconcile = lastReconcileStr == null
         ? DateTime.fromMillisecondsSinceEpoch(0)
         : DateTime.parse(lastReconcileStr);
     if (DateTime.now().difference(lastReconcile) > const Duration(hours: 1)) {
-      await Future.wait(_tables.map((t) async {
-        final remoteIds = (await supa.allIds(t)).toSet();
-        await db.deleteMissing(t == 'transactions' ? 'txns' : t, remoteIds);
-      }));
+      final remoteIds = (await supa.allIds('transactions')).toSet();
+      await db.deleteMissing('txns', remoteIds);
       await db.kvSet(
           'last_reconcile', DateTime.now().toUtc().toIso8601String());
     }
