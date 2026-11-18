@@ -73190,7 +73190,7 @@ a1=a0.h(a3,"emp_code")
 p=J.aC(a1==null?"":a1)
 a1=new A.b9B(a3)
 o=t.s
-n=new A.as(A.b([a1.$1("emergency_contact"),a1.$1("emergency_phone")],o),new A.b9w(),t.gD).bn(0," \u2014 ")
+n=new A.as(A.b([a1.$1("emergency_contact"),a1.$1("emergency_phone")],o),new A.b9w(),t.gD).bn(0," - ")
 m=A.b(["Full Name",a2],o)
 l=A.b(["Father Name",a1.$1("father_name")],o)
 k=A.b(["Date of Birth",a1.$1("date_of_birth")],o)
@@ -73621,11 +73621,11 @@ A.b9B.prototype={
 $1(a){var s,r=J.h(this.a,a)
 if(r!=null)s=J.aC(r).length===0
 else s=!0
-if(s)return"\u2014"
+if(s)return"-"
 return J.aC(r)},
 $S:47}
 A.b9w.prototype={
-$1(a){return a!=="\u2014"},
+$1(a){return a!=="-"},
 $S:12}
 A.b9y.prototype={
 $2(a,b){var s=null,r=A.vt(s,A.dg(a,A.h8(s,B.bls,s,s,s,s,s,s,s,B.bt,s,s,11,s,B.bs,s,!0,s,s,s,s),s,s),new A.tM(1,0,0.13333333333333333,0.21568627450980393),s,s,s,s,B.a3X,1/0),q=new A.rQ(B.Nw,0.5,B.jT),p=A.a5(b).i("a3<1,uk>")
